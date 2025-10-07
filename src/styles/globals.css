@@ -1,0 +1,993 @@
+@import "tailwindcss";
+
+/*
+ESPECIFICACIONES OFICIALES - PRESIDENCIA DE REPÚBLICA DOMINICANA
+================================================================
+
+COLORES INSTITUCIONALES OFICIALES:
+
+Caribbean Red (Rojo Caribeño):
+• CMYK: C:0 M:80 Y:90 K:0
+• RGB: R:238 G:42 B:36  
+• HEX: #EE2A24
+
+Starry Night Blue (Azul Noche Estrellada):
+• CMYK: C:100 M:55 Y:0 K:50
+• RGB: R:0 G:56 B:118
+• HEX: #003876
+
+TIPOGRAFÍAS INSTITUCIONALES OFICIALES:
+
+Gotham Typeface:
+- Para títulos principales y elementos de navegación
+- Aplicar en diferentes pesos según jerarquía
+- Uso en encabezados y elementos destacados
+
+Arial Rounded MT Bold Typeface:
+- Para contenido de texto y elementos secundarios
+- Aplicar en textos de contenido y párrafos
+- Uso en formularios y elementos de interfaz
+
+Directrices de Aplicación:
+- Mantener consistencia visual institucional
+- Cada tipografía debe aplicarse según su propósito específico
+- Respetar jerarquías visuales establecidas
+- Seguir estándares de accesibilidad gubernamental
+*/
+
+/* Importar tipografías institucionales oficiales */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  /* COLORES INSTITUCIONALES OFICIALES - PRESIDENCIA RD */
+  
+  /* Azul Noche Estrellada - Color Primario Oficial */
+  /* CMYK: C:100 M:55 Y:0 K:50 | RGB: 0,56,118 */
+  --dr-blue: #003876; /* Azul institucional oficial */
+  
+  /* Rojo Caribeño - Color Secundario Oficial */
+  /* CMYK: C:0 M:80 Y:90 K:0 | RGB: 238,42,36 */
+  --dr-red: #EE2A24; /* Rojo caribeño oficial actualizado */
+  
+  /* Colores de Soporte Institucional */
+  --dr-white: #FFFFFF; /* Blanco institucional */
+  --dr-dark-gray: #212529; /* Gris oscuro para texto principal */
+  --dr-light-gray: #F8F9FA; /* Gris claro para fondos secundarios */
+  
+  /* Paleta Extendida Derivada de Colores Oficiales */
+  --dr-blue-light: #1E5A96; /* Azul claro derivado */
+  --dr-blue-dark: #002A56; /* Azul oscuro derivado */
+  --dr-red-light: #FF5A4E; /* Rojo claro derivado del oficial */
+  --dr-red-dark: #C21E18; /* Rojo oscuro derivado del oficial */
+  
+  /* Variables Semánticas del Sistema */
+  --background: var(--dr-white);
+  --foreground: var(--dr-dark-gray);
+  --card: var(--dr-white);
+  --card-foreground: var(--dr-dark-gray);
+  --popover: var(--dr-white);
+  --popover-foreground: var(--dr-dark-gray);
+  --primary: var(--dr-blue);
+  --primary-foreground: var(--dr-white);
+  --secondary: var(--dr-light-gray);
+  --secondary-foreground: var(--dr-dark-gray);
+  --muted: var(--dr-light-gray);
+  --muted-foreground: #6C757D;
+  --accent: var(--dr-red);
+  --accent-foreground: var(--dr-white);
+  --destructive: var(--dr-red);
+  --destructive-foreground: var(--dr-white);
+  --border: #DEE2E6;
+  --input: var(--dr-white);
+  --ring: var(--dr-blue);
+  --radius: 0.5rem;
+
+  /* TIPOGRAFÍAS INSTITUCIONALES */
+  /* Gotham (simulada con Inter) - Para títulos y navegación */
+  --font-gotham: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  
+  /* Arial Rounded MT Bold (simulada con Nunito) - Para contenido y formularios */
+  --font-arial-rounded: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+
+/* CONFIGURACIÓN BASE DEL SISTEMA */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-arial-rounded); /* Arial Rounded MT Bold para contenido base */
+  background-color: var(--background);
+  color: var(--foreground);
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Asegurar que el contenedor principal del dashboard tenga altura completa */
+.dashboard-main-container {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden;
+}
+
+/* Estilos específicos para SidebarProvider */
+[data-sidebar-provider] {
+  height: 100vh !important;
+  overflow: hidden;
+}
+
+/* Contenedor flexible principal */
+.main-layout-container {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden;
+  display: flex !important;
+}
+
+/* JERARQUÍA TIPOGRÁFICA INSTITUCIONAL */
+
+/* Títulos Principales - Tipografía Gotham */
+h1, h2, h3 {
+  font-family: var(--font-gotham); /* Gotham para títulos principales */
+  color: var(--dr-dark-gray);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* Subtítulos y Encabezados Secundarios - Tipografía Gotham */
+h4, h5, h6 {
+  font-family: var(--font-gotham); /* Gotham para subtítulos */
+  color: var(--dr-dark-gray);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+/* Contenido de Texto - Arial Rounded MT Bold */
+p, span, div, li, td, th {
+  font-family: var(--font-arial-rounded); /* Arial Rounded para contenido */
+  color: var(--dr-dark-gray);
+  line-height: 1.6;
+}
+
+/* Elementos de Navegación - Tipografía Gotham */
+nav, .nav-item, .menu-item, .sidebar-item {
+  font-family: var(--font-gotham); /* Gotham para navegación */
+  font-weight: 500;
+}
+
+/* Botones - Tipografía Gotham */
+button, .btn, .button {
+  font-family: var(--font-gotham); /* Gotham para botones */
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Formularios - Arial Rounded MT Bold */
+input, textarea, select, label {
+  font-family: var(--font-arial-rounded); /* Arial Rounded para formularios */
+}
+
+/* CLASES UTILITARIAS DE COLORES OFICIALES */
+.text-dr-blue {
+  color: var(--dr-blue);
+}
+
+.text-dr-red {
+  color: var(--dr-red); /* Rojo caribeño oficial */
+}
+
+.text-dr-dark-gray {
+  color: var(--dr-dark-gray);
+}
+
+.bg-dr-blue {
+  background-color: var(--dr-blue);
+}
+
+.bg-dr-red {
+  background-color: var(--dr-red); /* Rojo caribeño oficial */
+}
+
+.bg-dr-light-gray {
+  background-color: var(--dr-light-gray);
+}
+
+.bg-dr-blue-light {
+  background-color: var(--dr-blue-light);
+}
+
+.bg-dr-blue-dark {
+  background-color: var(--dr-blue-dark);
+}
+
+.bg-dr-red-light {
+  background-color: var(--dr-red-light); /* Rojo claro actualizado */
+}
+
+.bg-dr-red-dark {
+  background-color: var(--dr-red-dark); /* Rojo oscuro actualizado */
+}
+
+.border-dr-blue {
+  border-color: var(--dr-blue);
+}
+
+.border-dr-red {
+  border-color: var(--dr-red); /* Rojo caribeño oficial */
+}
+
+/* ESTADOS HOVER CON COLORES OFICIALES */
+.hover\:bg-dr-light-gray:hover {
+  background-color: var(--dr-light-gray);
+}
+
+.hover\:text-dr-blue:hover {
+  color: var(--dr-blue);
+}
+
+.hover\:bg-dr-blue-dark:hover {
+  background-color: var(--dr-blue-dark);
+}
+
+.hover\:bg-dr-red-dark:hover {
+  background-color: var(--dr-red-dark); /* Hover rojo oscuro actualizado */
+}
+
+/* VARIANTES DE BOTONES INSTITUCIONALES */
+.btn-dr-primary {
+  background-color: var(--dr-blue);
+  color: var(--dr-white);
+  border: 1px solid var(--dr-blue);
+  font-family: var(--font-gotham); /* Gotham para botones principales */
+  font-weight: 600;
+}
+
+.btn-dr-primary:hover {
+  background-color: var(--dr-blue-dark);
+  border-color: var(--dr-blue-dark);
+}
+
+.btn-dr-secondary {
+  background-color: var(--dr-red); /* Rojo caribeño oficial */
+  color: var(--dr-white);
+  border: 1px solid var(--dr-red);
+  font-family: var(--font-gotham); /* Gotham para botones secundarios */
+  font-weight: 600;
+}
+
+.btn-dr-secondary:hover {
+  background-color: var(--dr-red-dark); /* Hover rojo oscuro actualizado */
+  border-color: var(--dr-red-dark);
+}
+
+/* ESTILOS GUBERNAMENTALES INSTITUCIONALES */
+.government-header {
+  background: linear-gradient(135deg, var(--dr-blue) 0%, var(--dr-blue-light) 100%);
+  color: var(--dr-white);
+  font-family: var(--font-gotham); /* Gotham para encabezados gubernamentales */
+}
+
+.government-accent {
+  border-bottom: 2px solid var(--dr-red); /* Acento rojo caribeño oficial */
+}
+
+.government-badge {
+  background-color: var(--dr-red); /* Insignias con rojo oficial */
+  color: var(--dr-white);
+  font-family: var(--font-gotham);
+  font-weight: 600;
+}
+
+/* COMPONENTES DE INTERFAZ CON MEJOR SEPARACIÓN VISUAL */
+.card {
+  background-color: var(--dr-white);
+  border: 1px solid #DEE2E6;
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-family: var(--font-arial-rounded);
+  position: relative;
+}
+
+/* Mejorar separación visual del contenido principal */
+.main-content-area {
+  background: linear-gradient(135deg, var(--dr-white) 0%, #FAFBFC 100%);
+  min-height: 100vh;
+  position: relative;
+}
+
+.main-content-area::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(0, 56, 118, 0.02) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(238, 42, 36, 0.01) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.card-header {
+  font-family: var(--font-gotham); /* Gotham para encabezados de tarjetas */
+  font-weight: 600;
+}
+
+/* ENLACES INSTITUCIONALES */
+a {
+  color: var(--dr-blue);
+  text-decoration: none;
+  font-family: var(--font-arial-rounded);
+}
+
+a:hover {
+  color: var(--dr-blue-dark);
+  text-decoration: underline;
+}
+
+/* FORMULARIOS INSTITUCIONALES */
+input, textarea, select {
+  border: 1px solid #DEE2E6;
+  background-color: var(--dr-white);
+  color: var(--dr-dark-gray);
+  font-family: var(--font-arial-rounded); /* Arial Rounded para campos de formulario */
+  font-weight: 400;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--dr-blue);
+  box-shadow: 0 0 0 2px rgba(0, 57, 118, 0.1);
+}
+
+label {
+  font-family: var(--font-arial-rounded); /* Arial Rounded para etiquetas */
+  font-weight: 500;
+  color: var(--dr-dark-gray);
+}
+
+/* TABLAS INSTITUCIONALES */
+.table th {
+  background-color: var(--dr-light-gray);
+  color: var(--dr-dark-gray);
+  font-family: var(--font-gotham); /* Gotham para encabezados de tabla */
+  font-weight: 600;
+}
+
+.table td {
+  color: var(--dr-dark-gray);
+  font-family: var(--font-arial-rounded); /* Arial Rounded para contenido de tabla */
+}
+
+/* SIDEBAR SIUBEN MEJORADO - SIN SUPERPOSICIÓN DE SCROLL */
+.siuben-sidebar {
+  background: linear-gradient(180deg, var(--dr-white) 0%, #FAFBFC 50%, var(--dr-white) 100%);
+  font-family: var(--font-gotham);
+  box-shadow: 
+    4px 0 20px rgba(0, 56, 118, 0.08),
+    2px 0 8px rgba(0, 56, 118, 0.04),
+    1px 0 3px rgba(0, 0, 0, 0.02);
+  position: relative;
+}
+
+/* LOGO CONTAINER PREMIUM MEJORADO */
+.logo-container-premium {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logo-container-premium:hover {
+  transform: scale(1.02);
+}
+
+/* Optimización del logo para mejor renderizado */
+.logo-container-premium img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Efectos especiales para modo colapsado */
+.siuben-sidebar[data-state="collapsed"] .logo-container-premium {
+  transform: scale(0.85);
+}
+
+.siuben-sidebar[data-state="collapsed"] .logo-container-premium:hover {
+  transform: scale(0.90);
+}
+
+/* Animación de entrada del logo */
+@keyframes logoEntrance {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.logo-container-premium {
+  animation: logoEntrance 0.6s ease-out;
+}
+
+/* Mejoras para contraste y legibilidad del header */
+.siuben-sidebar .sidebar-header-enhanced {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    var(--dr-blue) 0%,
+    var(--dr-blue-light) 30%,
+    var(--dr-blue) 70%,
+    var(--dr-blue-dark) 100%
+  );
+}
+
+.siuben-sidebar .sidebar-header-enhanced::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center top,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+/* Texto institucional mejorado */
+.siuben-sidebar .institutional-text {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.siuben-sidebar .institutional-subtitle {
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  opacity: 0.95;
+}
+
+/* Responsive optimizado para el logo */
+@media (max-width: 768px) {
+  .logo-container-premium {
+    transform: scale(0.9);
+  }
+  
+  .siuben-sidebar[data-state="collapsed"] .logo-container-premium {
+    transform: scale(0.75);
+  }
+}
+
+/* Sin efectos decorativos adicionales - sidebar limpio */
+
+/* Contenedor de navegación con auto layout vertical mejorado */
+.navigation-container {
+  /* Estilos de scrollbar personalizados */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 56, 118, 0.2) transparent;
+  /* Auto layout vertical */
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* Permitir scroll automático */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Comportamiento de scroll suave */
+  scroll-behavior: smooth;
+}
+
+/* Webkit scrollbar styling mejorado */
+.navigation-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.navigation-container::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.navigation-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 56, 118, 0.25) 0%,
+    rgba(0, 56, 118, 0.15) 50%,
+    rgba(0, 56, 118, 0.25) 100%
+  );
+  border-radius: 2px;
+  border: none;
+}
+
+.navigation-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 56, 118, 0.4) 0%,
+    rgba(0, 56, 118, 0.3) 50%,
+    rgba(0, 56, 118, 0.4) 100%
+  );
+}
+
+/* Auto layout para el sidebar principal - Altura completa */
+.siuben-sidebar {
+  display: flex !important;
+  flex-direction: column;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Items de navegación SIUBEN mejorados - Diseño sutil y elegante */
+.siuben-nav-item {
+  color: var(--dr-dark-gray);
+  font-family: var(--font-gotham);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  backdrop-filter: blur(2px);
+}
+
+.siuben-nav-item:hover {
+  transform: translateX(1px);
+  color: var(--dr-dark-gray);
+}
+
+.siuben-nav-item--active {
+  color: var(--dr-dark-gray);
+  font-weight: 700;
+  transform: translateX(2px);
+}
+
+.siuben-nav-item--active::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: linear-gradient(
+    180deg,
+    #6B7280 0%,
+    #9CA3AF 50%,
+    #6B7280 100%
+  );
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(107, 114, 128, 0.2);
+}
+
+/* Estados de focus mejorados para accesibilidad */
+.siuben-nav-item:focus-visible {
+  outline: 2px solid #6B7280;
+  outline-offset: 2px;
+  z-index: 10;
+}
+
+/* Animaciones de entrada suaves */
+.siuben-nav-item {
+  animation: slideInFromLeft 0.3s ease-out;
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Estados responsive mejorados */
+@media (max-width: 768px) {
+  .siuben-sidebar {
+    box-shadow: 
+      8px 0 32px rgba(0, 56, 118, 0.12),
+      4px 0 16px rgba(0, 56, 118, 0.08),
+      2px 0 8px rgba(0, 0, 0, 0.04);
+  }
+}
+
+/* Mejoras para modo colapsado */
+.siuben-sidebar[data-state="collapsed"] .siuben-nav-item {
+  justify-content: center;
+}
+
+.siuben-sidebar[data-state="collapsed"] .siuben-nav-item--active::before {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6B7280;
+}
+
+/* Efectos de glassmorphism para elementos especiales */
+.siuben-sidebar .glass-effect {
+  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* Transiciones suaves optimizadas */
+.siuben-nav-item,
+.siuben-nav-item * {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mejorar contraste y legibilidad */
+.siuben-nav-item[aria-current="page"] {
+  background: linear-gradient(
+    135deg,
+    rgba(107, 114, 128, 0.08) 0%,
+    rgba(156, 163, 175, 0.06) 50%,
+    rgba(209, 213, 219, 0.04) 100%
+  );
+  border-right: 3px solid #6B7280;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 2px 8px rgba(107, 114, 128, 0.1);
+}
+
+/* Estados disabled con mejor feedback visual */
+.siuben-nav-item:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  transform: none;
+}
+
+/* Mejoras adicionales para navegación por teclado */
+.siuben-nav-item:focus {
+  z-index: 10;
+}
+
+.siuben-nav-item:active {
+  transform: translateX(1px) scale(0.98);
+}
+
+/* Optimización de rendimiento */
+.siuben-sidebar,
+.navigation-container,
+.siuben-nav-item {
+  will-change: transform;
+  contain: layout style paint;
+}
+
+/* ALERTAS Y NOTIFICACIONES */
+.alert-success {
+  background-color: #D4EDDA;
+  border-color: #C3E6CB;
+  color: #155724;
+}
+
+.alert-warning {
+  background-color: #FFF3CD;
+  border-color: #FFEAA7;
+  color: #856404;
+}
+
+.alert-error {
+  background-color: #F8D7DA;
+  border-color: var(--dr-red-light); /* Usar variante del rojo oficial */
+  color: var(--dr-red-dark);
+}
+
+.alert-info {
+  background-color: #CCE7FF;
+  border-color: var(--dr-blue-light);
+  color: var(--dr-blue-dark);
+}
+
+/* CLASES DE TIPOGRAFÍA ESPECÍFICAS */
+.font-gotham {
+  font-family: var(--font-gotham); /* Aplicar Gotham específicamente */
+}
+
+.font-arial-rounded {
+  font-family: var(--font-arial-rounded); /* Aplicar Arial Rounded específicamente */
+}
+
+/* Títulos institucionales específicos */
+.title-institutional {
+  font-family: var(--font-gotham);
+  font-weight: 700;
+  color: var(--dr-blue);
+  letter-spacing: -0.02em;
+}
+
+/* Subtítulos institucionales */
+.subtitle-institutional {
+  font-family: var(--font-gotham);
+  font-weight: 600;
+  color: var(--dr-dark-gray);
+  letter-spacing: -0.01em;
+}
+
+/* Contenido institucional */
+.content-institutional {
+  font-family: var(--font-arial-rounded);
+  font-weight: 400;
+  color: var(--dr-dark-gray);
+  line-height: 1.6;
+}
+
+/* UTILIDADES RESPONSIVE Y DE SEPARACIÓN VISUAL */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* UTILIDADES DE SCROLLBAR PERSONALIZADO */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-track-transparent {
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-thumb-dr-blue\/20 {
+  scrollbar-color: rgba(0, 56, 118, 0.2) transparent;
+}
+
+.hover\:scrollbar-thumb-dr-blue\/30:hover {
+  scrollbar-color: rgba(0, 56, 118, 0.3) transparent;
+}
+
+/* Webkit scrollbar utilities */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thumb-dr-blue\/20::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 56, 118, 0.2);
+  border-radius: 2px;
+}
+
+.hover\:scrollbar-thumb-dr-blue\/30:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 56, 118, 0.3);
+}
+
+/* Separadores visuales mejorados */
+.visual-separator {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 56, 118, 0.1) 20%,
+    rgba(0, 56, 118, 0.2) 50%,
+    rgba(0, 56, 118, 0.1) 80%,
+    transparent 100%
+  );
+}
+
+.content-separation {
+  position: relative;
+}
+
+.content-separation::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -1px;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 56, 118, 0.15) 20%,
+    rgba(0, 56, 118, 0.25) 50%,
+    rgba(0, 56, 118, 0.15) 80%,
+    transparent 100%
+  );
+}
+
+/* Efectos de glassmorphism para elementos especiales */
+.glass-effect {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Mejora para transiciones suaves */
+.smooth-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.enhanced-shadow {
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 4px 16px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* OPTIMIZACIONES MÓVILES */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  /* Ajustar tipografía en móviles */
+  h1, h2, h3 {
+    font-size: clamp(1.5rem, 4vw, 2rem);
+  }
+  
+  body {
+    font-size: 14px;
+  }
+}
+
+/* CONFIGURACIÓN MEJORADA DE BARRA LATERAL */
+[data-sidebar] {
+  --sidebar-background: linear-gradient(180deg, var(--dr-white) 0%, #FAFBFC 50%, var(--dr-white) 100%);
+  --sidebar-foreground: var(--dr-dark-gray);
+  --sidebar-primary: var(--dr-blue);
+  --sidebar-primary-foreground: var(--dr-white);
+  --sidebar-accent: var(--dr-light-gray);
+  --sidebar-accent-foreground: var(--dr-dark-gray);
+  --sidebar-border: rgba(200, 205, 209, 0.6);
+  --sidebar-ring: var(--dr-blue);
+  
+  /* Configuración de anchos del sidebar */
+  --sidebar-width: 280px;
+  --sidebar-width-mobile: 280px; 
+  --sidebar-width-icon: 60px;
+  
+  /* Tipografía para sidebar */
+  font-family: var(--font-gotham);
+  
+  /* Efectos de separación visual mejorados */
+  position: relative;
+}
+
+/* Asegurar que el sidebar tenga el ancho correcto y auto layout */
+[data-sidebar="sidebar"] {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
+  flex-shrink: 0;
+  /* Auto layout vertical - Altura completa asegurada */
+  display: flex !important;
+  flex-direction: column;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  overflow: hidden;
+  position: relative;
+}
+
+[data-sidebar="sidebar"][data-state="collapsed"] {
+  width: var(--sidebar-width-icon);
+  min-width: var(--sidebar-width-icon);
+  max-width: var(--sidebar-width-icon);
+  /* Mantener auto layout en modo colapsado - Altura completa */
+  display: flex !important;
+  flex-direction: column;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+}
+
+/* Responsive sidebar en móviles */
+@media (max-width: 768px) {
+  [data-sidebar="sidebar"] {
+    width: var(--sidebar-width-mobile);
+    min-width: var(--sidebar-width-mobile);
+    max-width: var(--sidebar-width-mobile);
+  }
+}
+
+/* Asegurar que el SidebarInset ocupe el espacio restante - Altura completa */
+[data-sidebar="inset"] {
+  flex: 1;
+  min-width: 0;
+  width: calc(100% - var(--sidebar-width));
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-sidebar="inset"][data-sidebar-collapsed="true"] {
+  width: calc(100% - var(--sidebar-width-icon));
+}
+
+/* Sidebar sin decoraciones adicionales */
+
+/* Mejoras adicionales para elementos del sidebar */
+[data-sidebar] .sidebar-item-enhanced {
+  backdrop-filter: blur(2px);
+  position: relative;
+  overflow: hidden;
+}
+
+[data-sidebar] .sidebar-item-enhanced::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  opacity: 0;
+}
+
+[data-sidebar] .sidebar-item-enhanced:hover::before {
+  opacity: 1;
+}
+
+/* ESTILOS DE ACCESIBILIDAD GUBERNAMENTAL */
+/* Cumplir con estándares WCAG 2.1 AA */
+.focus-visible:focus-visible {
+  outline: 2px solid var(--dr-blue);
+  outline-offset: 2px;
+}
+
+/* Estados de hover mejorados para accesibilidad */
+.interactive-element:hover {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Indicadores de estado mejorados */
+.status-active {
+  color: #28A745;
+  font-weight: 600;
+}
+
+.status-inactive {
+  color: var(--dr-red); /* Usar rojo oficial para estados inactivos */
+  font-weight: 600;
+}
+
+.status-pending {
+  color: #FFC107;
+  font-weight: 600;
+}
+
+/* Mejorar contraste para elementos críticos */
+.critical-action {
+  background-color: var(--dr-red); /* Rojo caribeño oficial */
+  color: var(--dr-white);
+  font-family: var(--font-gotham);
+  font-weight: 700;
+  border: 2px solid var(--dr-red-dark);
+}
+
+.critical-action:hover {
+  background-color: var(--dr-red-dark);
+  border-color: var(--dr-red-dark);
+}

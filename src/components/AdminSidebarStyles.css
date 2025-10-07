@@ -1,0 +1,342 @@
+/* AdminSidebar - Estilos específicos para el componente */
+
+/* Contenedor principal del sidebar */
+.admin-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+/* Header del sidebar */
+.sidebar-header {
+  flex-shrink: 0;
+}
+
+.sidebar-brand {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.sidebar-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #E6EDF6;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.sidebar-subtitle {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #9FB0C6;
+  margin: 4px 0 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Navegación principal */
+.sidebar-nav {
+  flex: 1;
+  overflow: hidden;
+  /* Scrollbar gutter para evitar superposición */
+  scrollbar-gutter: stable;
+}
+
+.sidebar-nav-list {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Estilos del scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* Webkit scrollbar styling */
+.sidebar-nav-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav-list::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.sidebar-nav-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Container de cada item */
+.sidebar-item-container {
+  width: 100%;
+}
+
+/* Estilos base del item de navegación */
+.sidebar-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 16px;
+  color: #E6EDF6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  text-align: left;
+  /* Asegurar objetivo táctil mínimo de 44px */
+  min-height: 44px;
+}
+
+/* Estados del item */
+.sidebar-nav-item:hover {
+  background-color: #0F2A4A;
+  color: #E6EDF6;
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: 2px solid #7DB3FF;
+  outline-offset: 2px;
+}
+
+.sidebar-nav-item--active {
+  background-color: #14365C;
+  color: #E6EDF6;
+  font-weight: 600;
+}
+
+.sidebar-nav-item--active:hover {
+  background-color: #14365C;
+}
+
+/* Variante colapsada */
+.sidebar-nav-item--collapsed {
+  justify-content: center;
+  gap: 0;
+}
+
+/* Ícono del item */
+.sidebar-nav-icon {
+  flex-shrink: 0;
+  color: currentColor;
+  transition: color 0.2s ease;
+}
+
+/* Label del item */
+.sidebar-nav-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 16px;
+  color: currentColor;
+}
+
+.sidebar-nav-label--submenu {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Chevron para expandir submenú */
+.sidebar-nav-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: #9FB0C6;
+  transition: color 0.2s ease;
+}
+
+.sidebar-nav-item:hover .sidebar-nav-chevron {
+  color: #E6EDF6;
+}
+
+/* Submenú */
+.sidebar-submenu {
+  overflow: hidden;
+}
+
+.sidebar-submenu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9FB0C6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.sidebar-submenu-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #E6EDF6;
+}
+
+.sidebar-submenu-item:focus-visible {
+  outline: 2px solid #7DB3FF;
+  outline-offset: 2px;
+}
+
+/* Footer del sidebar */
+.sidebar-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.sidebar-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 16px;
+}
+
+.sidebar-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #14365C;
+  color: #E6EDF6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sidebar-user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #E6EDF6;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9FB0C6;
+  margin: 2px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Estados deshabilitados */
+.sidebar-nav-item:disabled,
+.sidebar-submenu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-sidebar {
+    position: fixed;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .admin-sidebar.sidebar--mobile-open {
+    transform: translateX(0);
+  }
+}
+
+/* Variantes de tema claro (si se necesitan) */
+.admin-sidebar.sidebar--light {
+  background-color: #ffffff;
+  border-right-color: #e5e7eb;
+}
+
+.sidebar--light .sidebar-title {
+  color: #1f2937;
+}
+
+.sidebar--light .sidebar-subtitle {
+  color: #6b7280;
+}
+
+.sidebar--light .sidebar-nav-item {
+  color: #374151;
+}
+
+.sidebar--light .sidebar-nav-item:hover {
+  background-color: #f3f4f6;
+}
+
+.sidebar--light .sidebar-nav-item--active {
+  background-color: #e7f1ff;
+  color: #0a2c5e;
+}
+
+/* Transiciones suaves para cambios de estado */
+.sidebar-nav-item,
+.sidebar-submenu-item,
+.sidebar-nav-chevron {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Asegurar que el contenido no se superponga con la scrollbar */
+.sidebar-nav-list {
+  box-sizing: border-box;
+}
+
+/* Mejorar la accesibilidad visual */
+.sidebar-nav-item:focus-visible,
+.sidebar-submenu-item:focus-visible {
+  z-index: 1;
+}
+
+/* Animaciones de entrada */
+.sidebar-nav-item {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.admin-sidebar[data-collapsed="true"] .sidebar-nav-label,
+.admin-sidebar[data-collapsed="true"] .sidebar-nav-chevron {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+.admin-sidebar[data-collapsed="false"] .sidebar-nav-label,
+.admin-sidebar[data-collapsed="false"] .sidebar-nav-chevron {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.2s ease 0.1s, transform 0.2s ease 0.1s;
+}
