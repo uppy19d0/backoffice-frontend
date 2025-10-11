@@ -1,11 +1,13 @@
+# Backoffice SIUBEN
 
-  # Backoffice SIUBEN
+Base de código del Backoffice de SIUBEN.
 
-  This is a code bundle for Backoffice SIUBEN. The original project is available at https://www.figma.com/design/40W7LeXgNT7Qtn6lLpRkKN/Backoffice-SIUBEN.
+## Requisitos
+- Node.js ≥ 18
+- npm ≥ 9
 
-  ## Running the code
-
-  Run `npm i` to install the dependencies.
-
-  Run `npm run dev` to start the development server.
-  
+## Inicio rápido
+```bash
+npm install
+npm run dev
+```

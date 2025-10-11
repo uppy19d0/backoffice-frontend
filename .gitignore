@@ -42,3 +42,4 @@ jest-html-reporters-attach/
 # Otros
 *.local
 *.cache
+.vercel
