@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -46,10 +46,13 @@ import {
   ChevronRight,
   Key,
   User,
+  Loader2,
 } from "lucide-react";
 import { useIsMobile } from "./ui/use-mobile";
 import governmentLogo from "../assets/Logo-Siuben.png";
 import { ChangePasswordModal } from "./ChangePasswordModal";
+import { ApiError, getNotifications, markNotificationRead, NotificationDto } from "../services/api";
+import { toast } from "sonner@2.0.3";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -80,6 +83,7 @@ interface DashboardLayoutProps {
   };
   onPasswordChange?: (username: string, newPassword: string) => Promise<boolean>;
   onValidateCurrentPassword?: (username: string, currentPassword: string) => Promise<boolean>;
+  authToken?: string | null;
 }
 
 const getNavigationItems = (permissions?: {
@@ -134,7 +138,9 @@ const getNavigationItems = (permissions?: {
     },
   ];
 
-  if (!permissions) return items;
+  if (!permissions) {
+    return items.filter(item => item.permission === null);
+  }
 
   return items.filter(item => {
     if (!item.permission) return true;
@@ -142,45 +148,133 @@ const getNavigationItems = (permissions?: {
   });
 };
 
-// Mock notifications data for SIUBEN system
-const mockNotifications = [
-  {
-    id: "1",
-    type: "system",
-    title: "Actualización del Sistema",
-    message: "El sistema SIUBEN se actualizará el próximo martes de 2:00 AM a 4:00 AM.",
-    timestamp: "2 horas",
-    read: false,
-    priority: "high",
-    icon: AlertCircle,
-    color: "text-amber-600",
-    bg: "bg-amber-50",
-  },
-  {
-    id: "2",
-    type: "request",
-    title: "Solicitudes Pendientes",
-    message: "15 nuevas solicitudes requieren revisión inmediata.",
-    timestamp: "3 horas",
-    read: false,
-    priority: "medium",
-    icon: ClipboardList,
-    color: "text-blue-600",
-    bg: "bg-blue-50",
-  },
-  {
-    id: "3",
-    type: "approval",
-    title: "Solicitudes Aprobadas",
-    message: "47 solicitudes han sido aprobadas en las últimas 24 horas.",
-    timestamp: "1 día",
-    read: true,
-    priority: "low",
-    icon: CheckCircle,
-    color: "text-green-600",
-    bg: "bg-green-50",
-  },
-];
+type NotificationPriority = 'high' | 'medium' | 'low';
+
+interface DashboardNotification {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+  priority: NotificationPriority;
+  type: string;
+  raw: NotificationDto;
+}
+
+const normalizeString = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return undefined;
+};
+
+const mapNotificationDtoToDashboard = (
+  notification: NotificationDto,
+  index: number,
+): DashboardNotification => {
+  const id =
+    normalizeString(notification.id) ??
+    normalizeString((notification as Record<string, unknown>).notificationId) ??
+    normalizeString((notification as Record<string, unknown>).uuid) ??
+    `notification-${index}`;
+
+  const title =
+    normalizeString(notification.title) ??
+    normalizeString((notification as Record<string, unknown>).subject) ??
+    'Notificación del sistema';
+
+  const message =
+    normalizeString(notification.message) ??
+    normalizeString(notification.content) ??
+    normalizeString(notification.body) ??
+    normalizeString((notification as Record<string, unknown>).description) ??
+    title;
+
+  const createdAt =
+    normalizeString(notification.createdAt) ??
+    normalizeString(notification.timestamp) ??
+    normalizeString((notification as Record<string, unknown>).date) ??
+    new Date().toISOString();
+
+  const read =
+    Boolean(notification.isRead ?? notification.read) ||
+    (typeof notification.status === 'string' &&
+      notification.status.toLowerCase().includes('read'));
+
+  const prioritySource =
+    normalizeString(notification.priority) ??
+    normalizeString((notification as Record<string, unknown>).severity) ??
+    normalizeString((notification as Record<string, unknown>).importance) ??
+    '';
+
+  let priority: NotificationPriority = 'medium';
+  const priorityValue = prioritySource?.toLowerCase();
+  if (priorityValue) {
+    if (
+      ['high', 'alta', 'urgent', 'urgente', 'critical', 'crítico', 'critico'].includes(
+        priorityValue,
+      )
+    ) {
+      priority = 'high';
+    } else if (['low', 'baja', 'informativo', 'info'].includes(priorityValue)) {
+      priority = 'low';
+    }
+  }
+
+  const type =
+    (normalizeString(notification.type) ??
+      normalizeString((notification as Record<string, unknown>).category) ??
+      normalizeString((notification as Record<string, unknown>).source) ??
+      (priority === 'high' ? 'alert' : 'general'))!.toLowerCase();
+
+  return {
+    id,
+    title,
+    message,
+    createdAt,
+    read,
+    priority,
+    type,
+    raw: notification,
+  };
+};
+
+const notificationPriorityStyles: Record<
+  NotificationPriority,
+  { color: string; bg: string }
+> = {
+  high: { color: 'text-red-600', bg: 'bg-red-50' },
+  medium: { color: 'text-blue-600', bg: 'bg-blue-50' },
+  low: { color: 'text-green-600', bg: 'bg-green-50' },
+};
+
+const notificationTypeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  alert: AlertCircle,
+  system: Info,
+  request: ClipboardList,
+  approval: CheckCircle,
+  general: Bell,
+};
+
+const getNotificationVisuals = (notification: DashboardNotification) => {
+  const base =
+    notificationPriorityStyles[notification.priority] ?? notificationPriorityStyles.medium;
+  const Icon =
+    notificationTypeIcons[notification.type] ??
+    (notification.priority === 'high' ? AlertCircle : Bell);
+
+  return {
+    icon: Icon,
+    color: base.color,
+    bg: base.bg,
+  };
+};
 
 export function DashboardLayout({
   children,
@@ -193,32 +287,148 @@ export function DashboardLayout({
   currentUser,
   onPasswordChange,
   onValidateCurrentPassword,
+  authToken,
 }: DashboardLayoutProps) {
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const isMobile = useIsMobile();
+  const canChangePassword = Boolean(onPasswordChange && currentUser);
+
+  const loadNotifications = useCallback(
+    async (showErrorToast = false) => {
+      if (!authToken) {
+        setNotifications([]);
+        setNotificationsError(null);
+        return;
+      }
+
+      setIsLoadingNotifications(true);
+      try {
+        const data = await getNotifications(authToken, { includeRead: true, take: 50 });
+        setNotifications(data.map(mapNotificationDtoToDashboard));
+        setNotificationsError(null);
+      } catch (error) {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : 'No se pudieron cargar las notificaciones.';
+        setNotificationsError(message);
+        if (showErrorToast) {
+          toast.error(message);
+        }
+      } finally {
+        setIsLoadingNotifications(false);
+      }
+    },
+    [authToken],
+  );
+
+  useEffect(() => {
+    loadNotifications(false);
+  }, [loadNotifications]);
+
+  const openChangePasswordModal = () => {
+    if (canChangePassword) {
+      setShowChangePasswordModal(true);
+    }
+  };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const handleToggleNotifications = () => {
-    setShowNotifications(!showNotifications);
+    setShowNotifications((prev) => {
+      const next = !prev;
+      if (next) {
+        loadNotifications(false);
+      }
+      return next;
+    });
   };
 
-  const markAsRead = (id: string) => {
+  const markAsRead = async (id: string) => {
+    let hasChanged = false;
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      prev.map((n) => {
+        if (n.id === id && !n.read) {
+          hasChanged = true;
+          return { ...n, read: true };
+        }
+        return n;
+      }),
     );
+
+    if (!hasChanged || !authToken) {
+      return;
+    }
+
+    try {
+      await markNotificationRead(authToken, id);
+    } catch (error) {
+      toast.error('No se pudo marcar la notificación como leída. Intente nuevamente.');
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: false } : n)),
+      );
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, read: true })),
-    );
+  const markAllAsRead = async () => {
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
+    if (unreadIds.length === 0) {
+      return;
+    }
+
+    const previousState = notifications;
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+
+    if (!authToken) {
+      return;
+    }
+
+    try {
+      await Promise.all(unreadIds.map((id) => markNotificationRead(authToken, id)));
+    } catch (error) {
+      toast.error('No se pudieron marcar todas las notificaciones como leídas.');
+      setNotifications(previousState.map((n) => ({ ...n })));
+    }
   };
 
-  const getRelativeTime = (timestamp: string) => {
-    return `hace ${timestamp}`;
+  const getRelativeTime = (timestamp?: string) => {
+    if (!timestamp) {
+      return 'Hace instantes';
+    }
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return timestamp;
+    }
+
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.round(diffMs / 60000);
+
+    if (diffMinutes < 1) return 'Hace instantes';
+    if (diffMinutes < 60) {
+      return `Hace ${diffMinutes} min${diffMinutes !== 1 ? 's' : ''}`;
+    }
+    const diffHours = Math.round(diffMinutes / 60);
+    if (diffHours < 24) {
+      return `Hace ${diffHours} h${diffHours !== 1 ? 's' : ''}`;
+    }
+
+    const diffDays = Math.round(diffHours / 24);
+    if (diffDays < 7) {
+      return `Hace ${diffDays} día${diffDays !== 1 ? 's' : ''}`;
+    }
+
+    return date.toLocaleString('es-DO', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const navigationItems = getNavigationItems(userPermissions);
@@ -324,10 +534,17 @@ export function DashboardLayout({
                   {navigationItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = currentPage === item.id;
+                    const isDisabled =
+                      item.permission !== null &&
+                      userPermissions &&
+                      !userPermissions[item.permission as keyof typeof userPermissions];
                     return (
                       <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
-                          onClick={() => onPageChange(item.id)}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            onPageChange(item.id);
+                          }}
                           isActive={isActive}
                           tooltip={item.label}
                           className={`
@@ -337,9 +554,14 @@ export function DashboardLayout({
                             ${
                               isActive
                                 ? "siuben-nav-item--active bg-gradient-to-r from-gray-100/80 via-gray-50/60 to-white/40 text-dr-dark-gray font-gotham font-bold border-r-3 border-gray-400 shadow-sm"
-                                : "text-dr-dark-gray hover:bg-gradient-to-r hover:from-gray-50/60 hover:to-white/40 hover:text-dr-dark-gray font-gotham font-medium hover:shadow-sm"
+                                : `text-dr-dark-gray ${
+                                    isDisabled
+                                      ? "opacity-60 cursor-not-allowed"
+                                      : "hover:bg-gradient-to-r hover:from-gray-50/60 hover:to-white/40 hover:text-dr-dark-gray"
+                                  } font-gotham font-medium ${isDisabled ? "" : "hover:shadow-sm"}`
                             }
                           `}
+                          disabled={isDisabled}
                         >
                           {/* Efecto de overlay sutil en hover */}
                           <div className="absolute inset-0 bg-gradient-to-r from-gray-50/8 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"></div>
@@ -421,14 +643,18 @@ export function DashboardLayout({
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => setShowChangePasswordModal(true)}
-                  className="cursor-pointer font-arial-rounded p-3 focus:bg-blue-50 hover:bg-blue-50 group"
-                >
-                  <Key className="mr-3 h-4 w-4 text-dr-blue group-hover:scale-105 transition-transform" />
-                  <span className="text-dr-blue font-semibold">Cambiar Contraseña</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {canChangePassword && (
+                  <>
+                    <DropdownMenuItem 
+                      onClick={openChangePasswordModal}
+                      className="cursor-pointer font-arial-rounded p-3 focus:bg-blue-50 hover:bg-blue-50 group"
+                    >
+                      <Key className="mr-3 h-4 w-4 text-dr-blue group-hover:scale-105 transition-transform" />
+                      <span className="text-dr-blue font-semibold">Cambiar Contraseña</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem 
                   onClick={onLogout}
                   className="cursor-pointer text-dr-red focus:text-dr-red focus:bg-red-50 hover:bg-red-50 font-arial-rounded p-3 group"
@@ -505,8 +731,11 @@ export function DashboardLayout({
                               )}
                               {unreadCount > 0 && (
                                 <button
-                                  onClick={markAllAsRead}
-                                  className="text-xs text-dr-blue hover:bg-blue-50 font-arial-rounded px-2 py-1 rounded transition-colors"
+                                  onClick={() => {
+                                    void markAllAsRead();
+                                  }}
+                                  disabled={isLoadingNotifications}
+                                  className="text-xs text-dr-blue hover:bg-blue-50 font-arial-rounded px-2 py-1 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   Marcar como leídas
                                 </button>
@@ -516,9 +745,19 @@ export function DashboardLayout({
                         </div>
 
                         {/* Lista de Notificaciones */}
+                        {notificationsError && (
+                          <div className="px-4 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100 font-arial-rounded text-left">
+                            {notificationsError}
+                          </div>
+                        )}
                         <div className="max-h-80 overflow-y-auto">
                           <div className="p-2">
-                            {notifications.length === 0 ? (
+                            {isLoadingNotifications ? (
+                              <div className="flex flex-col items-center justify-center gap-3 py-12 text-gray-500">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                                <p className="text-sm font-arial-rounded">Cargando notificaciones...</p>
+                              </div>
+                            ) : notifications.length === 0 ? (
                               <div className="text-center py-12 text-gray-500">
                                 <Bell className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                 <p className="font-gotham font-semibold">No hay notificaciones</p>
@@ -526,7 +765,8 @@ export function DashboardLayout({
                               </div>
                             ) : (
                               notifications.map((notification) => {
-                                const Icon = notification.icon;
+                                const visuals = getNotificationVisuals(notification);
+                                const Icon = visuals.icon;
                                 return (
                                   <div
                                     key={notification.id}
@@ -538,14 +778,16 @@ export function DashboardLayout({
                                           : "bg-white border border-amber-200/50 hover:bg-amber-50"
                                       }
                                     `}
-                                    onClick={() => markAsRead(notification.id)}
+                                    onClick={() => {
+                                      void markAsRead(notification.id);
+                                    }}
                                   >
                                     <div className="flex items-start gap-3">
                                       <div
-                                        className={`${notification.bg} p-2 rounded-full flex-shrink-0`}
+                                        className={`${visuals.bg} p-2 rounded-full flex-shrink-0`}
                                       >
                                         <Icon
-                                          className={`h-4 w-4 ${notification.color}`}
+                                          className={`h-4 w-4 ${visuals.color}`}
                                         />
                                       </div>
                                       <div className="flex-1 min-w-0">
@@ -566,7 +808,7 @@ export function DashboardLayout({
                                         </p>
                                         <div className="flex items-center justify-between">
                                           <span className="text-xs text-gray-500 font-medium">
-                                            {getRelativeTime(notification.timestamp)}
+                                            {getRelativeTime(notification.createdAt)}
                                           </span>
                                           {notification.priority === "high" && (
                                             <Badge
@@ -601,13 +843,15 @@ export function DashboardLayout({
                 </div>
 
                 {/* Botón de Cambiar Contraseña - Mobile Only */}
-                <button
-                  onClick={() => setShowChangePasswordModal(true)}
-                  className="relative text-dr-blue hover:bg-blue-50 rounded-lg p-2 transition-all duration-200 md:hidden"
-                  title="Cambiar Contraseña"
-                >
-                  <Key className="h-5 w-5" />
-                </button>
+                {canChangePassword && (
+                  <button
+                    onClick={openChangePasswordModal}
+                    className="relative text-dr-blue hover:bg-blue-50 rounded-lg p-2 transition-all duration-200 md:hidden"
+                    title="Cambiar Contraseña"
+                  >
+                    <Key className="h-5 w-5" />
+                  </button>
+                )}
 
                 {/* Enhanced User Avatar with Dropdown - Desktop Only */}
                 <DropdownMenu>
@@ -644,14 +888,18 @@ export function DashboardLayout({
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => setShowChangePasswordModal(true)}
-                      className="cursor-pointer focus:bg-blue-50"
-                    >
-                      <Key className="mr-2 h-4 w-4 text-dr-blue" />
-                      <span className="text-dr-blue font-medium">Cambiar Contraseña</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    {canChangePassword && (
+                      <>
+                        <DropdownMenuItem 
+                          onClick={openChangePasswordModal}
+                          className="cursor-pointer focus:bg-blue-50"
+                        >
+                          <Key className="mr-2 h-4 w-4 text-dr-blue" />
+                          <span className="text-dr-blue font-medium">Cambiar Contraseña</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem 
                       onClick={onLogout}
                       className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
@@ -682,7 +930,7 @@ export function DashboardLayout({
       </div>
 
       {/* Modal de Cambio de Contraseña */}
-      {currentUser && onPasswordChange && (
+      {canChangePassword && currentUser && (
         <ChangePasswordModal
           isOpen={showChangePasswordModal}
           onClose={() => setShowChangePasswordModal(false)}

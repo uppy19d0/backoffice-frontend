@@ -8,86 +8,93 @@ import { Eye, EyeOff, Lock, User } from 'lucide-react';
 import governmentLogo from '../assets/Logo-Siuben.png';
 
 interface LoginFormProps {
-  onLogin: (username: string, password: string) => void;
+  onLogin: (email: string, password: string) => void;
   error?: string;
   isLoading?: boolean;
 }
 
 export function LoginForm({ onLogin, error, isLoading }: LoginFormProps) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(username, password);
+    onLogin(email, password);
   };
 
   return (
-    <div className="min-h-screen bg-dr-light-gray flex flex-col">
-      {/* Government Header */}
-      <div className="government-header py-8 px-6">
-        <div className="container mx-auto">
-          <div className="flex flex-col items-center gap-4">
-            <div className="bg-white p-4 rounded-lg shadow-lg">
-              <img 
-                src={governmentLogo} 
-                alt="Gobierno de la República Dominicana - Sistema Único de Beneficiarios" 
-                className="h-20 w-auto max-w-sm"
-              />
-            </div>
-            <div className="text-center">
-              <p className="text-blue-200 text-lg font-medium">
-                Panel Administrativo
-              </p>
-            </div>
+    <div className="min-h-screen bg-dr-light-gray flex flex-col md:flex-row">
+      {/* Brand / Hero */}
+      <div className="relative w-full md:w-1/2 xl:w-2/5 bg-gradient-to-br from-dr-blue via-dr-blue-dark to-dr-navy flex items-center justify-center px-6 py-10 md:py-16 overflow-hidden">
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top,white,transparent_60%)]" />
+        <div className="relative w-full max-w-md space-y-6 text-center md:text-left">
+          <div className="inline-flex items-center justify-center md:justify-start rounded-2xl bg-white/10 backdrop-blur px-5 py-3 border border-white/20 shadow-lg">
+            <img
+              src={governmentLogo}
+              alt="Gobierno de la República Dominicana - Sistema Único de Beneficiarios"
+              className="h-14 w-auto md:h-16 lg:h-18"
+            />
+          </div>
+          <div className="space-y-3 text-white">
+            <p className="text-sm uppercase tracking-[0.35em] text-white/80 font-gotham">
+              República Dominicana
+            </p>
+            <h1 className="text-3xl md:text-4xl font-gotham font-bold leading-tight">
+              Sistema Único de Beneficiarios
+            </h1>
+            <p className="text-white/90 text-base md:text-lg font-arial-rounded">
+              Acceso seguro al panel administrativo para la gestión nacional de beneficiarios.
+            </p>
           </div>
         </div>
       </div>
 
       {/* Login Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-8">
-        <Card className="w-full max-w-md shadow-lg">
-          <CardHeader className="text-center space-y-4">
-            <div className="mx-auto h-12 w-12 bg-dr-blue rounded-full flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:px-8 md:px-10 md:py-16">
+        <Card className="w-full max-w-sm sm:max-w-md shadow-xl border border-gray-200/80">
+          <CardHeader className="text-center space-y-4 px-6 sm:px-8 pt-8">
+            <div className="mx-auto h-12 w-12 bg-dr-blue rounded-full flex items-center justify-center shadow-md">
               <Lock className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <CardTitle className="text-dr-dark-gray text-2xl">
+            <div className="space-y-2">
+              <CardTitle className="text-dr-dark-gray text-2xl sm:text-3xl">
                 Acceso al Sistema
               </CardTitle>
-              <CardDescription className="text-gray-600">
-                Ingrese sus credenciales para acceder al panel administrativo
+              <CardDescription className="text-gray-600 text-sm sm:text-base leading-relaxed">
+                Ingrese sus credenciales institucionales para acceder al panel administrativo.
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <CardContent className="px-6 sm:px-8 pb-8">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <Alert className="border-amber-300 bg-amber-50">
-                  <AlertDescription className="text-amber-800">{error}</AlertDescription>
+                <Alert className="border-amber-300 bg-amber-50 text-left">
+                  <AlertDescription className="text-amber-800 text-sm sm:text-base">
+                    {error}
+                  </AlertDescription>
                 </Alert>
               )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="username" className="text-dr-dark-gray font-medium">
-                  Usuario
+
+              <div className="space-y-2 text-left">
+                <Label htmlFor="email" className="text-dr-dark-gray font-medium">
+                  Correo electrónico
                 </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
-                    id="username"
-                    type="text"
-                    placeholder="Ingrese su usuario"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    id="email"
+                    type="email"
+                    placeholder="correo@siuben.gob.do"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 border-gray-300 focus:border-dr-blue focus:ring-dr-blue"
                     required
                   />
                 </div>
               </div>
-              
-              <div className="space-y-2">
+
+              <div className="space-y-2 text-left">
                 <Label htmlFor="password" className="text-dr-dark-gray font-medium">
                   Contraseña
                 </Label>
@@ -106,67 +113,23 @@ export function LoginForm({ onLogin, error, isLoading }: LoginFormProps) {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
-              
-              <Button 
-                type="submit" 
-                className="w-full bg-dr-blue hover:bg-dr-blue-dark text-white font-medium py-2"
+
+              <Button
+                type="submit"
+                className="w-full bg-dr-blue hover:bg-dr-blue-dark text-white font-medium py-2.5"
                 disabled={isLoading}
               >
                 {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </Button>
             </form>
-            
-            <div className="mt-6 p-4 bg-dr-light-gray rounded-lg space-y-3">
-              <p className="text-sm text-dr-dark-gray text-center font-medium">
-                Credenciales de demostración:
-              </p>
-              
-              {/* Administrador */}
-              <div className="text-center">
-                <p className="text-xs text-gray-500 font-medium">ADMINISTRADOR</p>
-                <p className="text-sm text-gray-600">
-                  Usuario: <span className="font-mono text-dr-blue">admin</span> | 
-                  Contraseña: <span className="font-mono text-dr-blue">admin123</span>
-                </p>
-              </div>
-              
-              {/* Manager */}
-              <div className="text-center">
-                <p className="text-xs text-gray-500 font-medium">GERENTE/SUPERVISOR</p>
-                <p className="text-sm text-gray-600">
-                  Usuario: <span className="font-mono text-dr-blue">manager</span> | 
-                  Contraseña: <span className="font-mono text-dr-blue">manager123</span>
-                </p>
-              </div>
-              
-              {/* Analista */}
-              <div className="text-center">
-                <p className="text-xs text-gray-500 font-medium">ANALISTA</p>
-                <p className="text-sm text-gray-600">
-                  Usuario: <span className="font-mono text-dr-blue">analista</span> | 
-                  Contraseña: <span className="font-mono text-dr-blue">analista123</span>
-                </p>
-              </div>
-            </div>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Footer */}
-      <div className="bg-white border-t py-4 px-6">
-        <div className="container mx-auto text-center">
-          <p className="text-sm text-gray-600">
-            © 2025 Gobierno de la República Dominicana - SIUBEN
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Sistema seguro protegido por medidas de seguridad gubernamentales
-          </p>
-        </div>
       </div>
     </div>
   );

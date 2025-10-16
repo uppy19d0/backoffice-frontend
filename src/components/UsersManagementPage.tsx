@@ -1,38 +1,43 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Textarea } from './ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
 import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
-import { toast } from 'sonner@2.0.3';
-import { 
-  Users, 
-  UserPlus, 
-  Search,
-  Filter,
-  Edit3,
-  Shield,
-  Eye,
-  Trash2,
-  Settings,
-  MoreHorizontal,
-  CheckCircle,
+import { Separator } from './ui/separator';
+import {
   AlertCircle,
-  Clock,
-  UserX,
-  UserCheck,
-  Ban,
-  RotateCcw,
-  Save,
-  Key,
-  RefreshCw
+  Building2,
+  Mail,
+  MapPin,
+  RefreshCw,
+  Shield,
+  UserPlus,
 } from 'lucide-react';
+import { toast } from 'sonner@2.0.3';
+import {
+  AdminUserDto,
+  ApiError,
+  ReferenceItem,
+  createUser,
+  getAdminUsers,
+  getDepartments,
+  getNonAdminUsers,
+  getProvinces,
+  getRoles,
+} from '../services/api';
 
 interface CurrentUser {
   username: string;
@@ -46,1321 +51,788 @@ interface CurrentUser {
     canViewReports: boolean;
     canManageBeneficiaries: boolean;
   };
+  rawProfile?: Record<string, unknown> | null;
 }
 
-interface PageProps {
+interface UsersManagementPageProps {
   currentUser?: CurrentUser | null;
-  onUpdateUser?: (username: string, updates: any) => void;
-  getPermissionsByRole?: (roleLevel: 'administrador' | 'manager' | 'analista') => any;
+  authToken: string | null;
 }
 
-interface SystemUser {
-  id: string;
-  username: string;
-  name: string;
-  email: string;
-  role: string;
-  roleLevel: 'administrador' | 'manager' | 'analista';
-  status: 'active' | 'inactive' | 'suspended';
-  department: string;
-  province: string;
-  lastLogin: string;
-  createdDate: string;
-}
-
-export function UsersManagementPage({ currentUser, onUpdateUser, getPermissionsByRole }: PageProps) {
-  // Estado de usuarios - ahora funcional
-  const [users, setUsers] = useState<SystemUser[]>([
-    {
-      id: 'USR-001',
-      username: 'admin',
-      name: 'Dr. María Elena Santos',
-      email: 'maria.santos@siuben.gob.do',
-      role: 'Administrador General SIUBEN',
-      roleLevel: 'administrador',
-      status: 'active',
-      department: 'Administración Central',
-      province: 'Distrito Nacional',
-      lastLogin: '08/01/2025 09:30',
-      createdDate: '15/03/2024'
-    },
-    {
-      id: 'USR-002',
-      username: 'manager',
-      name: 'Lic. Ana Patricia Jiménez',
-      email: 'ana.jimenez@siuben.gob.do',
-      role: 'Gerente de Operaciones',
-      roleLevel: 'manager',
-      status: 'active',
-      department: 'Operaciones',
-      province: 'Santo Domingo',
-      lastLogin: '08/01/2025 08:45',
-      createdDate: '20/04/2024'
-    },
-    {
-      id: 'USR-003',
-      username: 'analista',
-      name: 'Lic. Esperanza María Rodríguez',
-      email: 'esperanza.rodriguez@siuben.gob.do',
-      role: 'Analista de Solicitudes',
-      roleLevel: 'analista',
-      status: 'active',
-      department: 'Evaluación',
-      province: 'Santiago',
-      lastLogin: '08/01/2025 07:15',
-      createdDate: '10/05/2024'
-    },
-    {
-      id: 'USR-004',
-      username: 'jvaldez',
-      name: 'Lic. Juan Miguel Valdez',
-      email: 'juan.valdez@siuben.gob.do',
-      role: 'Analista Regional',
-      roleLevel: 'analista',
-      status: 'active',
-      department: 'Evaluación Regional',
-      province: 'La Vega',
-      lastLogin: '07/01/2025 16:30',
-      createdDate: '25/06/2024'
-    },
-    {
-      id: 'USR-005',
-      username: 'rmendoza',
-      name: 'Ing. Roberto Carlos Mendoza',
-      email: 'roberto.mendoza@siuben.gob.do',
-      role: 'Supervisor Regional',
-      roleLevel: 'manager',
-      status: 'active',
-      department: 'Supervisión Regional',
-      province: 'San Cristóbal',
-      lastLogin: '08/01/2025 06:45',
-      createdDate: '12/07/2024'
-    },
-    {
-      id: 'USR-006',
-      username: 'cperez',
-      name: 'Lic. Carmen Pérez González',
-      email: 'carmen.perez@siuben.gob.do',
-      role: 'Analista Senior',
-      roleLevel: 'analista',
-      status: 'suspended',
-      department: 'Evaluación',
-      province: 'Azua',
-      lastLogin: '05/01/2025 14:20',
-      createdDate: '18/08/2024'
-    }
-  ]);
-
-  // Estados para modales y formularios
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false); // Modal solo para ver
-  const [showEditModal, setShowEditModal] = useState(false); // Modal para editar
-  const [showRoleCredentialsModal, setShowRoleCredentialsModal] = useState(false); // Modal para cambiar rol y credenciales
-  const [showSuspendDialog, setShowSuspendDialog] = useState(false);
-  const [showActivateDialog, setShowActivateDialog] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
-  const [suspendReason, setSuspendReason] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
-
-  // Estado para nuevo usuario
-  const [newUser, setNewUser] = useState({
-    username: '',
-    name: '',
-    email: '',
-    role: '',
-    roleLevel: '' as 'administrador' | 'manager' | 'analista' | '',
-    department: '',
-    province: '',
-    password: '',
-    confirmPassword: ''
-  });
-
-  // Estado para editar usuario
-  const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
-
-  // Estado para cambiar rol y credenciales
-  const [roleCredentialsForm, setRoleCredentialsForm] = useState({
-    newRoleLevel: '' as 'administrador' | 'manager' | 'analista' | '',
-    newRole: '',
-    newPassword: '',
-    confirmNewPassword: '',
-    reason: ''
-  });
-
-  // Filtrar usuarios
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-    const matchesRole = roleFilter === 'all' || user.roleLevel === roleFilter;
-    
-    return matchesSearch && matchesStatus && matchesRole;
-  });
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">
-          <CheckCircle className="h-3 w-3 mr-1" />
-          Activo
-        </Badge>;
-      case 'inactive':
-        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">
-          <Clock className="h-3 w-3 mr-1" />
-          Inactivo
-        </Badge>;
-      case 'suspended':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">
-          <Ban className="h-3 w-3 mr-1" />
-          Suspendido
-        </Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  const getRoleBadge = (roleLevel: string) => {
-    switch (roleLevel) {
-      case 'administrador':
-        return <Badge className="bg-dr-blue text-white">Administrador</Badge>;
-      case 'manager':
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Manager</Badge>;
-      case 'analista':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Analista</Badge>;
-      default:
-        return <Badge variant="outline">{roleLevel}</Badge>;
-    }
-  };
-
-  // Funciones de acción - Completamente funcionales
-
-  // Ver usuario (solo lectura)
-  const handleViewUser = (user: SystemUser) => {
-    setSelectedUser(user);
-    setShowViewModal(true);
-  };
-
-  // Editar usuario (con campos editables)
-  const handleEditUser = (user: SystemUser) => {
-    setEditingUser({ ...user }); // Clonar el usuario para editar
-    setShowEditModal(true);
-  };
-
-  // Guardar cambios del usuario editado
-  const handleSaveEditUser = () => {
-    if (!editingUser) return;
-
-    // Validaciones básicas
-    if (!editingUser.name.trim() || !editingUser.email.trim()) {
-      toast.error('Por favor complete todos los campos requeridos');
-      return;
-    }
-
-    // Verificar email único (excluyendo el usuario actual)
-    if (users.some(user => user.email === editingUser.email && user.id !== editingUser.id)) {
-      toast.error('El email ya está en uso por otro usuario');
-      return;
-    }
-
-    // Actualizar el usuario en la lista
-    setUsers(prev => prev.map(user => 
-      user.id === editingUser.id ? editingUser : user
-    ));
-
-    toast.success(`Usuario ${editingUser.name} actualizado exitosamente`);
-    
-    // Cerrar modal y limpiar estado
-    setShowEditModal(false);
-    setEditingUser(null);
-  };
-
-  const handleSuspendUser = async () => {
-    if (!selectedUser || !suspendReason.trim()) {
-      toast.error('Por favor proporcione una razón para la suspensión');
-      return;
-    }
-
-    // Actualizar el estado del usuario
-    setUsers(prev => prev.map(user => 
-      user.id === selectedUser.id 
-        ? { ...user, status: 'suspended' as const }
-        : user
-    ));
-
-    toast.success(`Usuario ${selectedUser.name} suspendido exitosamente`);
-    
-    // Cerrar modal y limpiar estado
-    setShowSuspendDialog(false);
-    setSelectedUser(null);
-    setSuspendReason('');
-  };
-
-  const handleActivateUser = async () => {
-    if (!selectedUser) return;
-
-    // Actualizar el estado del usuario
-    setUsers(prev => prev.map(user => 
-      user.id === selectedUser.id 
-        ? { ...user, status: 'active' as const }
-        : user
-    ));
-
-    toast.success(`Usuario ${selectedUser.name} activado exitosamente`);
-    
-    // Cerrar modal y limpiar estado
-    setShowActivateDialog(false);
-    setSelectedUser(null);
-  };
-
-  const handleCreateUser = () => {
-    // Validación básica
-    if (!newUser.username || !newUser.name || !newUser.email || !newUser.roleLevel) {
-      toast.error('Por favor complete todos los campos requeridos');
-      return;
-    }
-
-    if (newUser.password !== newUser.confirmPassword) {
-      toast.error('Las contraseñas no coinciden');
-      return;
-    }
-
-    // Verificar si el usuario ya existe
-    if (users.some(user => user.username === newUser.username || user.email === newUser.email)) {
-      toast.error('El nombre de usuario o email ya existe');
-      return;
-    }
-
-    // Crear nuevo usuario
-    const newUserId = `USR-${String(users.length + 1).padStart(3, '0')}`;
-    const userToAdd: SystemUser = {
-      id: newUserId,
-      username: newUser.username,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role || `${newUser.roleLevel === 'administrador' ? 'Administrador' : newUser.roleLevel === 'manager' ? 'Manager' : 'Analista'} del Sistema`,
-      roleLevel: newUser.roleLevel,
-      status: 'active',
-      department: newUser.department || 'Por asignar',
-      province: newUser.province || 'Por asignar',
-      lastLogin: 'Nunca',
-      createdDate: new Date().toLocaleDateString('es-DO')
-    };
-
-    setUsers(prev => [...prev, userToAdd]);
-    toast.success(`Usuario ${newUser.name} creado exitosamente`);
-    
-    // Resetear formulario y cerrar modal
-    setNewUser({
-      username: '',
-      name: '',
-      email: '',
-      role: '',
-      roleLevel: '',
-      department: '',
-      province: '',
-      password: '',
-      confirmPassword: ''
-    });
-    setShowCreateModal(false);
-  };
-
-  const openSuspendDialog = (user: SystemUser) => {
-    // Prevenir que un usuario se suspenda a sí mismo
-    if (currentUser && user.username === currentUser.username) {
-      toast.error('No puede suspenderse a sí mismo');
-      return;
-    }
-    setSelectedUser(user);
-    setShowSuspendDialog(true);
-  };
-
-  const openActivateDialog = (user: SystemUser) => {
-    setSelectedUser(user);
-    setShowActivateDialog(true);
-  };
-
-  // Función para abrir modal de cambio de rol y credenciales
-  const handleChangeRoleCredentials = (user: SystemUser) => {
-    if (currentUser && user.username === currentUser.username) {
-      toast.error('No puede cambiar su propio rol o credenciales');
-      return;
-    }
-    
-    setSelectedUser(user);
-    setRoleCredentialsForm({
-      newRoleLevel: user.roleLevel,
-      newRole: user.role,
-      newPassword: '',
-      confirmNewPassword: '',
-      reason: ''
-    });
-    setShowRoleCredentialsModal(true);
-  };
-
-  // Función para guardar cambios de rol y credenciales
-  const handleSaveRoleCredentials = () => {
-    if (!selectedUser) return;
-
-    // Validaciones
-    if (!roleCredentialsForm.newRoleLevel) {
-      toast.error('Por favor seleccione un nivel de rol');
-      return;
-    }
-
-    if (!roleCredentialsForm.reason.trim()) {
-      toast.error('Por favor proporcione una razón para el cambio');
-      return;
-    }
-
-    if (roleCredentialsForm.newPassword) {
-      if (roleCredentialsForm.newPassword !== roleCredentialsForm.confirmNewPassword) {
-        toast.error('Las contraseñas no coinciden');
-        return;
-      }
-      if (roleCredentialsForm.newPassword.length < 6) {
-        toast.error('La contraseña debe tener al menos 6 caracteres');
-        return;
-      }
-    }
-
-    // Actualizar el usuario en la lista local
-    const updatedUser = {
-      roleLevel: roleCredentialsForm.newRoleLevel as 'administrador' | 'manager' | 'analista',
-      role: roleCredentialsForm.newRole || getRoleTitle(roleCredentialsForm.newRoleLevel as 'administrador' | 'manager' | 'analista')
-    };
-
-    setUsers(prev => prev.map(user => 
-      user.id === selectedUser.id 
-        ? { ...user, ...updatedUser }
-        : user
-    ));
-
-    // Actualizar el sistema de autenticación si está disponible
-    if (onUpdateUser && getPermissionsByRole) {
-      const systemUpdates = {
-        ...updatedUser,
-        permissions: getPermissionsByRole(roleCredentialsForm.newRoleLevel as 'administrador' | 'manager' | 'analista')
-      };
-
-      // Si se cambió la contraseña, incluirla
-      if (roleCredentialsForm.newPassword) {
-        systemUpdates.password = roleCredentialsForm.newPassword;
-      }
-
-      onUpdateUser(selectedUser.username, systemUpdates);
-    }
-
-    const changeMessage = roleCredentialsForm.newPassword 
-      ? `Rol y credenciales de ${selectedUser.name} actualizados exitosamente`
-      : `Rol de ${selectedUser.name} actualizado exitosamente`;
-    
-    toast.success(changeMessage);
-    
-    // Cerrar modal y limpiar estado
-    setShowRoleCredentialsModal(false);
-    setSelectedUser(null);
-    setRoleCredentialsForm({
-      newRoleLevel: '',
-      newRole: '',
-      newPassword: '',
-      confirmNewPassword: '',
-      reason: ''
-    });
-  };
-
-  // Función auxiliar para obtener título de rol por defecto
-  const getRoleTitle = (roleLevel: 'administrador' | 'manager' | 'analista') => {
-    switch (roleLevel) {
-      case 'administrador':
-        return 'Administrador del Sistema';
-      case 'manager':
-        return 'Supervisor/Manager';
-      case 'analista':
-        return 'Analista de Solicitudes';
-      default:
-        return 'Usuario del Sistema';
-    }
-  };
-
-  if (!currentUser?.permissions.canCreateUsers) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Alert className="max-w-md">
-          <Shield className="h-4 w-4" />
-          <AlertDescription>
-            No tiene permisos suficientes para acceder a la gestión de usuarios.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
+const resolveString = (
+  source: Record<string, unknown> | undefined,
+  keys: string[],
+  fallback = '—',
+): string => {
+  if (!source) {
+    return fallback;
   }
+
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return fallback;
+};
+
+const resolveStatusDescriptor = (
+  status: AdminUserDto['status'],
+): { label: string; className: string } => {
+  if (status === null || status === undefined) {
+    return { label: 'Desconocido', className: 'bg-gray-100 text-gray-700 border-gray-200' };
+  }
+
+  if (typeof status === 'number') {
+    switch (status) {
+      case 1:
+        return { label: 'Activo', className: 'bg-green-100 text-green-800 border-green-200' };
+      case 0:
+        return { label: 'Inactivo', className: 'bg-red-100 text-red-800 border-red-200' };
+      case 2:
+        return { label: 'Suspendido', className: 'bg-amber-100 text-amber-800 border-amber-200' };
+      default:
+        return { label: `Estado ${status}`, className: 'bg-blue-100 text-blue-800 border-blue-200' };
+    }
+  }
+
+  if (typeof status === 'string') {
+    const normalized = status.toLowerCase();
+    if (['active', 'activo', '1'].includes(normalized)) {
+      return { label: 'Activo', className: 'bg-green-100 text-green-800 border-green-200' };
+    }
+    if (['inactive', 'inactivo', '0'].includes(normalized)) {
+      return { label: 'Inactivo', className: 'bg-red-100 text-red-800 border-red-200' };
+    }
+    if (['suspended', 'suspendido', '2'].includes(normalized)) {
+      return { label: 'Suspendido', className: 'bg-amber-100 text-amber-800 border-amber-200' };
+    }
+    if (['pending', 'pendiente'].includes(normalized)) {
+      return { label: 'Pendiente', className: 'bg-blue-100 text-blue-800 border-blue-200' };
+    }
+    return { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200' };
+  }
+
+  return { label: 'Desconocido', className: 'bg-gray-100 text-gray-700 border-gray-200' };
+};
+
+const formatDateTime = (value?: string | null): string => {
+  if (!value) {
+    return '—';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('es-DO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const resolveOptionValue = (item: ReferenceItem): string => {
+  const candidates = ['code', 'id', 'key', 'value'];
+  for (const candidate of candidates) {
+    const value = item[candidate];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  if (typeof item.name === 'string' && item.name.trim()) {
+    return item.name;
+  }
+  return String(item.id ?? item.code ?? item.key ?? item.name ?? '');
+};
+
+const resolveOptionLabel = (item: ReferenceItem): string => {
+  const candidates = ['name', 'description', 'label', 'code'];
+  for (const candidate of candidates) {
+    const value = item[candidate];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return resolveOptionValue(item);
+};
+
+const UNASSIGNED_VALUE = '__none__';
+
+const INITIAL_FORM_STATE = {
+  email: '',
+  fullName: '',
+  jobTitle: '',
+  role: '',
+  departmentId: UNASSIGNED_VALUE,
+  provinceId: UNASSIGNED_VALUE,
+  status: '1',
+  tempPassword: '',
+};
+
+const PASSWORD_RULE_TRANSLATIONS: Record<string, string> = {
+  'Passwords must have at least one non alphanumeric character.':
+    'La contraseña debe incluir al menos un carácter especial (no alfanumérico).',
+  "Passwords must have at least one lowercase ('a'-'z').":
+    'La contraseña debe incluir al menos una letra minúscula (a-z).',
+  "Passwords must have at least one uppercase ('A'-'Z').":
+    'La contraseña debe incluir al menos una letra mayúscula (A-Z).',
+};
+
+const formatPasswordRuleMessage = (message: string): string => {
+  const example = 'Ejemplo válido: Cambio#123!';
+  const parts = message
+    .split('|')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return message;
+  }
+
+  const translated = parts.map((part) => PASSWORD_RULE_TRANSLATIONS[part] ?? part);
+  return [example, ...translated.map((rule) => `- ${rule}`)].join('\n');
+};
+
+export function UsersManagementPage({ currentUser, authToken }: UsersManagementPageProps) {
+  const [users, setUsers] = useState<AdminUserDto[]>([]);
+  const [roles, setRoles] = useState<ReferenceItem[]>([]);
+  const [departments, setDepartments] = useState<ReferenceItem[]>([]);
+  const [provinces, setProvinces] = useState<ReferenceItem[]>([]);
+
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isLoadingReferences, setIsLoadingReferences] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createServersideError, setCreateServersideError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newUser, setNewUser] = useState<typeof INITIAL_FORM_STATE>(INITIAL_FORM_STATE);
+
+  const canCreateUsers = currentUser?.permissions.canCreateUsers === true;
+  const roleOptions = useMemo(
+    () =>
+      roles.map((role) => {
+        const record = role as Record<string, unknown>;
+        const value =
+          typeof record.name === 'string' && record.name.trim().length > 0
+            ? (record.name as string).trim()
+            : resolveOptionValue(role);
+        const label =
+          typeof record.displayName === 'string' && record.displayName.trim().length > 0
+            ? (record.displayName as string).trim()
+            : resolveOptionLabel(role) || value;
+
+        return { value, label };
+      }),
+    [roles],
+  );
+
+  const departmentOptions = useMemo(
+    () =>
+      departments.map((department) => ({
+        value: resolveOptionValue(department),
+        label: resolveOptionLabel(department),
+      })),
+    [departments],
+  );
+
+  const provinceOptions = useMemo(
+    () =>
+      provinces.map((province) => ({
+        value: resolveOptionValue(province),
+        label: resolveOptionLabel(province),
+      })),
+    [provinces],
+  );
+
+  const referencesReady =
+    roleOptions.length > 0 ||
+    departmentOptions.length > 0 ||
+    provinceOptions.length > 0 ||
+    !isLoadingReferences;
+
+  const loadUsers = useCallback(async () => {
+    if (!authToken) {
+      setUsers([]);
+      return;
+    }
+
+    setIsLoadingUsers(true);
+    setError(null);
+
+    try {
+      const [admins, nonAdmins] = await Promise.all([
+        getAdminUsers(authToken),
+        getNonAdminUsers(authToken),
+      ]);
+      setUsers([...admins, ...nonAdmins]);
+    } catch (err) {
+      console.error('Error cargando usuarios', err);
+      let message = 'No se pudo obtener la lista de usuarios.';
+
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          message = 'La sesión caducó o es inválida. Inicie sesión nuevamente.';
+        } else if (err.status === 403) {
+          message = 'Su cuenta no tiene permisos para consultar usuarios en el backoffice.';
+        } else if (typeof err.message === 'string' && err.message.trim()) {
+          message = err.message;
+        }
+      } else if (err instanceof TypeError) {
+        const text = err.message ?? '';
+        if (/Failed to fetch/i.test(text) || /NetworkError/i.test(text)) {
+          message = 'No se pudo contactar al servicio de usuarios. Verifique su conexión o la configuración de CORS en la API.';
+        } else {
+          message = text || message;
+        }
+      } else if (err instanceof Error && err.message) {
+        message = err.message;
+      }
+
+      setError(message);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [authToken]);
+
+  const loadReferences = useCallback(async () => {
+    if (!authToken) {
+      setRoles([]);
+      setDepartments([]);
+      setProvinces([]);
+      return;
+    }
+
+    setIsLoadingReferences(true);
+
+    try {
+      const [rolesResponse, departmentsResponse, provincesResponse] = await Promise.all([
+        getRoles(authToken),
+        getDepartments(authToken),
+        getProvinces(authToken),
+      ]);
+
+      setRoles(rolesResponse);
+      setDepartments(departmentsResponse);
+      setProvinces(provincesResponse);
+    } catch (err) {
+      console.error('Error cargando catálogos', err);
+      toast.error('No se pudieron cargar los catálogos de referencia.');
+    } finally {
+      setIsLoadingReferences(false);
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken || !canCreateUsers) {
+      return;
+    }
+    loadUsers();
+    loadReferences();
+  }, [authToken, canCreateUsers, loadUsers, loadReferences]);
+
+  useEffect(() => {
+    if (!newUser.role && roleOptions.length > 0) {
+      setNewUser((prev) => ({ ...prev, role: roleOptions[0].value }));
+    }
+  }, [roleOptions, newUser.role]);
+
+  const handleDialogOpenChange = (open: boolean) => {
+    if (open) {
+      if (!canCreateUsers) {
+        toast.warning('Su cuenta no tiene permisos para crear usuarios.');
+        setIsCreateDialogOpen(false);
+        return;
+      }
+
+      setCreateError(null);
+      setNewUser(INITIAL_FORM_STATE);
+      setIsCreateDialogOpen(true);
+      if (!referencesReady && !isLoadingReferences) {
+        loadReferences();
+      }
+      return;
+    }
+
+    setIsCreateDialogOpen(false);
+    setIsCreating(false);
+    setCreateError(null);
+  };
+
+  const handleSubmitNewUser = async () => {
+    if (!authToken) {
+      setCreateError('Debe iniciar sesión nuevamente para crear usuarios.');
+      return;
+    }
+
+    if (!newUser.email || !newUser.fullName || !newUser.role || !newUser.tempPassword) {
+      setCreateError('Complete los campos requeridos (correo, nombre, rol y contraseña temporal).');
+      return;
+    }
+
+    setIsCreating(true);
+    setCreateError(null);
+    setCreateServersideError(null);
+
+    try {
+      const departmentIdValue =
+        !newUser.departmentId || newUser.departmentId === UNASSIGNED_VALUE
+          ? null
+          : newUser.departmentId;
+      const provinceIdValue =
+        !newUser.provinceId || newUser.provinceId === UNASSIGNED_VALUE
+          ? null
+          : newUser.provinceId;
+
+      await createUser(authToken, {
+        email: newUser.email.trim(),
+        fullName: newUser.fullName.trim(),
+        jobTitle: newUser.jobTitle.trim() || null,
+        role: newUser.role,
+        departmentId: departmentIdValue,
+        provinceId: provinceIdValue,
+        status: Number.parseInt(newUser.status, 10),
+        tempPassword: newUser.tempPassword,
+      });
+
+      toast.success('Usuario creado exitosamente.');
+      setIsCreateDialogOpen(false);
+      setNewUser(INITIAL_FORM_STATE);
+      await loadUsers();
+    } catch (err) {
+      console.error('Error creando usuario', err);
+      let message = 'No se pudo crear el usuario. Inténtelo nuevamente.';
+
+      const normalizeMessage = (raw: string) =>
+        raw.includes('Passwords must') ? formatPasswordRuleMessage(raw) : raw;
+
+      if (err instanceof ApiError) {
+        const details = err.details;
+        if (details && typeof details === 'object') {
+          if (
+            'error' in details &&
+            typeof (details as Record<string, unknown>).error === 'string' &&
+            (details as Record<string, unknown>).error.trim().length > 0
+          ) {
+            const raw = ((details as Record<string, unknown>).error as string).trim();
+            message = normalizeMessage(raw);
+          } else if (
+            'message' in details &&
+            typeof (details as Record<string, unknown>).message === 'string' &&
+            (details as Record<string, unknown>).message.trim().length > 0
+          ) {
+            const raw = ((details as Record<string, unknown>).message as string).trim();
+            message = normalizeMessage(raw);
+          }
+        } else if (err.message.trim().length > 0) {
+          message = normalizeMessage(err.message.trim());
+        }
+      } else if (err instanceof Error && err.message.trim().length > 0) {
+        message = normalizeMessage(err.message.trim());
+      }
+
+      setCreateServersideError(message);
+      toast.error(message);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-dr-dark-gray">Gestión de Usuarios</h2>
-          <p className="text-gray-600">Administración de usuarios del sistema SIUBEN</p>
-        </div>
-        
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogTrigger asChild>
-            <Button className="bg-dr-blue hover:bg-dr-blue-dark text-white">
-              <UserPlus className="h-4 w-4 mr-2" />
-              Crear Usuario
+      {!authToken && (
+        <Alert className="border-amber-200 bg-amber-50">
+          <Shield className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            Inicie sesión nuevamente para gestionar usuarios.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle className="text-2xl text-dr-dark-gray">Gestión de usuarios</CardTitle>
+            <CardDescription>
+              Consulta los usuarios registrados en el backoffice y crea nuevos perfiles administrativos.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={loadUsers}
+              disabled={isLoadingUsers || !authToken}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+              Actualizar
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-dr-dark-gray">Crear Nuevo Usuario</DialogTitle>
-              <DialogDescription>
-                Complete los datos para crear un nuevo usuario del sistema SIUBEN
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">Usuario *</Label>
-                <Input
-                  id="username"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                  placeholder="Nombre de usuario"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="name">Nombre Completo *</Label>
-                <Input
-                  id="name"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser({...newUser, name: e.target.value})}
-                  placeholder="Nombre completo"
-                />
-              </div>
-              
-              <div className="space-y-2 col-span-2">
-                <Label htmlFor="email">Correo Electrónico *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                  placeholder="usuario@siuben.gob.do"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="roleLevel">Nivel de Rol *</Label>
-                <Select value={newUser.roleLevel} onValueChange={(value: 'administrador' | 'manager' | 'analista') => setNewUser({...newUser, roleLevel: value})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar nivel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="administrador">Administrador</SelectItem>
-                    <SelectItem value="manager">Manager/Supervisor</SelectItem>
-                    <SelectItem value="analista">Analista</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="role">Título del Cargo</Label>
-                <Input
-                  id="role"
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                  placeholder="Ej: Analista de Solicitudes"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="department">Departamento</Label>
-                <Input
-                  id="department"
-                  value={newUser.department}
-                  onChange={(e) => setNewUser({...newUser, department: e.target.value})}
-                  placeholder="Ej: Evaluación"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="province">Provincia</Label>
-                <Select value={newUser.province} onValueChange={(value) => setNewUser({...newUser, province: value})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar provincia" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Distrito Nacional">Distrito Nacional</SelectItem>
-                    <SelectItem value="Santo Domingo">Santo Domingo</SelectItem>
-                    <SelectItem value="Santiago">Santiago</SelectItem>
-                    <SelectItem value="La Vega">La Vega</SelectItem>
-                    <SelectItem value="San Cristóbal">San Cristóbal</SelectItem>
-                    <SelectItem value="Azua">Azua</SelectItem>
-                    <SelectItem value="Barahona">Barahona</SelectItem>
-                    <SelectItem value="La Romana">La Romana</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                  placeholder="Contraseña temporal"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmar Contraseña *</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={newUser.confirmPassword}
-                  onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
-                  placeholder="Confirmar contraseña"
-                />
-              </div>
-            </div>
-            
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateUser} className="bg-dr-blue hover:bg-dr-blue-dark text-white">
-                Crear Usuario
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <Dialog open={isCreateDialogOpen} onOpenChange={handleDialogOpenChange}>
+              <DialogTrigger asChild>
+                <Button
+                  disabled={!authToken || !canCreateUsers}
+                  className="gap-2 bg-dr-blue hover:bg-dr-blue-dark text-white"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Nuevo usuario
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Crear nuevo usuario</DialogTitle>
+                  <DialogDescription>
+                    Complete la información solicitada para agregar un nuevo usuario al sistema SIUBEN.
+                  </DialogDescription>
+                </DialogHeader>
 
-        {/* Modal para Cambiar Rol y Credenciales */}
-        <Dialog open={showRoleCredentialsModal} onOpenChange={setShowRoleCredentialsModal}>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
-                <Key className="h-5 w-5 text-dr-blue" />
-                Cambiar Rol y Credenciales
-              </DialogTitle>
-              <DialogDescription>
-                Modificar el nivel de acceso y credenciales de {selectedUser?.name}
-              </DialogDescription>
-            </DialogHeader>
-            
-            {selectedUser && (
-              <div className="space-y-4">
-                {/* Información del Usuario Actual */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-dr-dark-gray mb-2">Información Actual:</h4>
-                  <div className="text-sm space-y-1">
-                    <p><span className="font-medium">Usuario:</span> {selectedUser.name} (@{selectedUser.username})</p>
-                    <p><span className="font-medium">Rol Actual:</span> {getRoleBadge(selectedUser.roleLevel)}</p>
-                    <p><span className="font-medium">Departamento:</span> {selectedUser.department}</p>
-                  </div>
-                </div>
-
-                {/* Nuevo Nivel de Rol */}
-                <div className="space-y-2">
-                  <Label htmlFor="newRoleLevel">Nuevo Nivel de Rol *</Label>
-                  <Select 
-                    value={roleCredentialsForm.newRoleLevel} 
-                    onValueChange={(value: 'administrador' | 'manager' | 'analista') => 
-                      setRoleCredentialsForm({...roleCredentialsForm, newRoleLevel: value})
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar nuevo nivel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="administrador">
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-4 w-4" />
-                          Administrador
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="manager">
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="h-4 w-4" />
-                          Manager/Supervisor
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="analista">
-                        <div className="flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          Analista
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Título del Cargo (opcional) */}
-                <div className="space-y-2">
-                  <Label htmlFor="newRole">Título del Cargo</Label>
-                  <Input
-                    id="newRole"
-                    value={roleCredentialsForm.newRole}
-                    onChange={(e) => setRoleCredentialsForm({...roleCredentialsForm, newRole: e.target.value})}
-                    placeholder={getRoleTitle(roleCredentialsForm.newRoleLevel as any) || "Ej: Supervisor Regional"}
-                  />
-                </div>
-
-                {/* Cambiar Contraseña (opcional) */}
-                <div className="space-y-4 border-t pt-4">
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4 text-gray-500" />
-                    <h4 className="font-medium text-dr-dark-gray">Cambiar Contraseña (Opcional)</h4>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">Nueva Contraseña</Label>
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      value={roleCredentialsForm.newPassword}
-                      onChange={(e) => setRoleCredentialsForm({...roleCredentialsForm, newPassword: e.target.value})}
-                      placeholder="Dejar vacío para mantener actual"
-                    />
-                  </div>
-                  
-                  {roleCredentialsForm.newPassword && (
+                {referencesReady ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="confirmNewPassword">Confirmar Nueva Contraseña</Label>
+                      <Label htmlFor="new-user-email">Correo electrónico</Label>
                       <Input
-                        id="confirmNewPassword"
-                        type="password"
-                        value={roleCredentialsForm.confirmNewPassword}
-                        onChange={(e) => setRoleCredentialsForm({...roleCredentialsForm, confirmNewPassword: e.target.value})}
-                        placeholder="Confirmar contraseña"
+                        id="new-user-email"
+                        type="email"
+                        placeholder="usuario@siuben.gob.do"
+                        value={newUser.email}
+                        onChange={(event) =>
+                          setNewUser((prev) => ({ ...prev, email: event.target.value }))
+                        }
+                        required
                       />
                     </div>
-                  )}
-                </div>
-
-                {/* Razón del Cambio */}
-                <div className="space-y-2">
-                  <Label htmlFor="reason">Razón del Cambio *</Label>
-                  <Textarea
-                    id="reason"
-                    value={roleCredentialsForm.reason}
-                    onChange={(e) => setRoleCredentialsForm({...roleCredentialsForm, reason: e.target.value})}
-                    placeholder="Explicar el motivo del cambio de rol y/o credenciales..."
-                    rows={3}
-                  />
-                </div>
-
-                {/* Información de Permisos */}
-                {roleCredentialsForm.newRoleLevel && (
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-dr-blue mb-2">Permisos del Nuevo Rol:</h4>
-                    <div className="text-sm space-y-1">
-                      {roleCredentialsForm.newRoleLevel === 'administrador' && (
-                        <>
-                          <p>✅ Crear y gestionar usuarios</p>
-                          <p>✅ Aprobar y revisar solicitudes</p>
-                          <p>✅ Acceso a reportes completos</p>
-                          <p>✅ Gestión de beneficiarios</p>
-                        </>
-                      )}
-                      {roleCredentialsForm.newRoleLevel === 'manager' && (
-                        <>
-                          <p>❌ Crear usuarios</p>
-                          <p>✅ Aprobar y revisar solicitudes</p>
-                          <p>✅ Acceso a reportes operacionales</p>
-                          <p>✅ Gestión de beneficiarios</p>
-                        </>
-                      )}
-                      {roleCredentialsForm.newRoleLevel === 'analista' && (
-                        <>
-                          <p>❌ Crear usuarios</p>
-                          <p>❌ Aprobar solicitudes</p>
-                          <p>✅ Revisar solicitudes</p>
-                          <p>❌ Acceso a reportes</p>
-                          <p>❌ Gestión de beneficiarios</p>
-                        </>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-user-fullName">Nombre completo</Label>
+                      <Input
+                        id="new-user-fullName"
+                        placeholder="Nombre y apellidos"
+                        value={newUser.fullName}
+                        onChange={(event) =>
+                          setNewUser((prev) => ({ ...prev, fullName: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-user-jobTitle">Cargo</Label>
+                      <Input
+                        id="new-user-jobTitle"
+                        placeholder="Analista, Coordinador, etc."
+                        value={newUser.jobTitle}
+                        onChange={(event) =>
+                          setNewUser((prev) => ({ ...prev, jobTitle: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Rol</Label>
+                      {roleOptions.length > 0 ? (
+                        <Select
+                          value={newUser.role}
+                          onValueChange={(value) =>
+                            setNewUser((prev) => ({ ...prev, role: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione un rol" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roleOptions.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          placeholder="Rol (ej. Admin, Analyst)"
+                          value={newUser.role}
+                          onChange={(event) =>
+                            setNewUser((prev) => ({ ...prev, role: event.target.value }))
+                          }
+                          required
+                        />
                       )}
                     </div>
+                    <div className="space-y-2">
+                      <Label>Departamento</Label>
+                      {departmentOptions.length > 0 ? (
+                        <Select
+                          value={newUser.departmentId}
+                          onValueChange={(value) =>
+                            setNewUser((prev) => ({ ...prev, departmentId: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione un departamento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNASSIGNED_VALUE}>Sin asignar</SelectItem>
+                            {departmentOptions.map((dept) => (
+                              <SelectItem key={dept.value} value={dept.value}>
+                                {dept.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          placeholder="Departamento (escriba el nombre)"
+                          value={newUser.departmentId === UNASSIGNED_VALUE ? '' : newUser.departmentId}
+                          onChange={(event) =>
+                            setNewUser((prev) => ({
+                              ...prev,
+                              departmentId:
+                                event.target.value.trim() === ''
+                                  ? UNASSIGNED_VALUE
+                                  : event.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Provincia</Label>
+                      {provinceOptions.length > 0 ? (
+                        <Select
+                          value={newUser.provinceId}
+                          onValueChange={(value) =>
+                            setNewUser((prev) => ({ ...prev, provinceId: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione una provincia" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNASSIGNED_VALUE}>Sin asignar</SelectItem>
+                            {provinceOptions.map((province) => (
+                              <SelectItem key={province.value} value={province.value}>
+                                {province.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          placeholder="Provincia (escriba el nombre)"
+                          value={newUser.provinceId === UNASSIGNED_VALUE ? '' : newUser.provinceId}
+                          onChange={(event) =>
+                            setNewUser((prev) => ({
+                              ...prev,
+                              provinceId:
+                                event.target.value.trim() === ''
+                                  ? UNASSIGNED_VALUE
+                                  : event.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Estado</Label>
+                      <Select
+                        value={newUser.status}
+                        onValueChange={(value) =>
+                          setNewUser((prev) => ({ ...prev, status: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccione un estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">Activo</SelectItem>
+                          <SelectItem value="0">Inactivo</SelectItem>
+                          <SelectItem value="2">Suspendido</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-user-tempPassword">Contraseña temporal</Label>
+                      <Input
+                        id="new-user-tempPassword"
+                        type="password"
+                        placeholder="Temporal#123"
+                        value={newUser.tempPassword}
+                        onChange={(event) =>
+                          setNewUser((prev) => ({ ...prev, tempPassword: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 py-10">
+                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-dr-blue/30 border-t-dr-blue" />
+                    <p className="text-sm text-gray-600 text-center">
+                      Cargando catálogos y configuraciones necesarias para crear usuarios...
+                    </p>
                   </div>
                 )}
-              </div>
-            )}
-            
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowRoleCredentialsModal(false)}
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={handleSaveRoleCredentials} 
-                className="bg-dr-blue hover:bg-dr-blue-dark text-white"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Guardar Cambios
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Usuarios</CardTitle>
-            <Users className="h-4 w-4 text-dr-blue" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">{users.length}</div>
-            <p className="text-xs text-gray-600 mt-1">Usuarios registrados</p>
-          </CardContent>
-        </Card>
+                {(createError || createServersideError) && (
+                  <Alert className="border-red-200 bg-red-50">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-700 space-y-1">
+                      {createError && <p>{createError}</p>}
+                      {createServersideError &&
+                        createServersideError.split('\n').map((line, idx) => (
+                          <p key={`server-error-${idx}`}>{line}</p>
+                        ))}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usuarios Activos</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">
-              {users.filter(u => u.status === 'active').length}
-            </div>
-            <p className="text-xs text-gray-600 mt-1">Conectados recientemente</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Administradores</CardTitle>
-            <Shield className="h-4 w-4 text-dr-blue" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">
-              {users.filter(u => u.roleLevel === 'administrador').length}
-            </div>
-            <p className="text-xs text-gray-600 mt-1">Acceso completo</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Suspendidos</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">
-              {users.filter(u => u.status === 'suspended').length}
-            </div>
-            <p className="text-xs text-gray-600 mt-1">Requieren atención</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input 
-            placeholder="Buscar usuarios..." 
-            className="pl-10 border-gray-300" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2 sm:gap-4">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] border-gray-300">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="active">Activos</SelectItem>
-              <SelectItem value="inactive">Inactivos</SelectItem>
-              <SelectItem value="suspended">Suspendidos</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] border-gray-300">
-              <SelectValue placeholder="Rol" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los Roles</SelectItem>
-              <SelectItem value="administrador">Administrador</SelectItem>
-              <SelectItem value="manager">Manager</SelectItem>
-              <SelectItem value="analista">Analista</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Users Table */}
-      <Card className="border border-gray-200">
+                <DialogFooter className="mt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    disabled={isCreating}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-dr-blue hover:bg-dr-blue-dark text-white"
+                    onClick={handleSubmitNewUser}
+                    disabled={isCreating}
+                  >
+                    {isCreating ? 'Creando...' : 'Crear usuario'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
+          {error && (
+            <Alert className="m-4 border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-700">
+                {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-dr-dark-gray">ID</TableHead>
-                  <TableHead className="text-dr-dark-gray min-w-[200px]">Usuario</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden sm:table-cell">Rol</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden md:table-cell">Departamento</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden lg:table-cell">Provincia</TableHead>
-                  <TableHead className="text-dr-dark-gray">Estado</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden lg:table-cell">Último Acceso</TableHead>
-                  <TableHead className="w-[160px]">Acciones</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Correo</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="hidden lg:table-cell">Departamento</TableHead>
+                  <TableHead className="hidden lg:table-cell">Provincia</TableHead>
+                  <TableHead className="hidden xl:table-cell">Creado</TableHead>
+                  <TableHead className="hidden xl:table-cell">Último acceso</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => {
-                  const isCurrentUser = currentUser?.username === user.username;
-                  return (
-                    <TableRow 
-                      key={user.id} 
-                      className={isCurrentUser ? "bg-blue-50/50 border-l-4 border-dr-blue" : ""}
-                    >
-                      <TableCell className="font-medium text-dr-blue">{user.id}</TableCell>
-                      <TableCell>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-dr-dark-gray">{user.name}</p>
-                            {isCurrentUser && (
-                              <Badge variant="outline" className="bg-dr-blue text-white border-dr-blue text-xs">
-                                Usted
-                              </Badge>
-                            )}
+                {isLoadingUsers ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center text-gray-500">
+                      Cargando usuarios...
+                    </TableCell>
+                  </TableRow>
+                ) : users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center text-gray-500">
+                      No hay usuarios registrados.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((user) => {
+                    const fullName = resolveString(user, ['fullName', 'name']);
+                    const email = resolveString(user, ['email', 'userName', 'username'], 'Sin correo');
+                    const role = resolveString(user, ['role', 'roleName', 'roleKey', 'roleDescription']);
+                    const department = resolveString(user, ['departmentName', 'department', 'departmentTitle']);
+                    const province = resolveString(user, ['provinceName', 'province', 'provinceTitle']);
+                    const statusInfo = resolveStatusDescriptor(user.status);
+                    const createdAt = resolveString(user, ['createdAt', 'createdDate'], '');
+                    const lastLogin = resolveString(user, ['lastLoginAt', 'lastLogin'], '');
+
+                    return (
+                      <TableRow key={user.id ?? `${email}-${role}`}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-dr-dark-gray">{fullName}</span>
+                            <span className="text-xs text-gray-500">
+                              {resolveString(user, ['jobTitle', 'position'], '')}
+                            </span>
                           </div>
-                          <p className="text-sm text-gray-500">@{user.username}</p>
-                          <p className="text-sm text-gray-500 md:hidden">{user.department}</p>
-                        </div>
-                      </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      {getRoleBadge(user.roleLevel)}
-                    </TableCell>
-                    <TableCell className="text-dr-dark-gray hidden md:table-cell">{user.department}</TableCell>
-                    <TableCell className="text-dr-dark-gray hidden lg:table-cell">{user.province}</TableCell>
-                    <TableCell>{getStatusBadge(user.status)}</TableCell>
-                    <TableCell className="text-dr-dark-gray hidden lg:table-cell text-sm">
-                      {user.lastLogin}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {/* Botón VER (solo lectura) */}
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleViewUser(user)}
-                          title="Ver detalles"
-                          className="text-dr-blue hover:bg-blue-50"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-
-                        {/* Botón EDITAR (modificar información) */}
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleEditUser(user)}
-                          title="Editar información"
-                          className="text-green-600 hover:bg-green-50"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </Button>
-
-                        {/* Botón CAMBIAR ROL/CREDENCIALES */}
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleChangeRoleCredentials(user)}
-                          title={currentUser?.username === user.username ? "No puede cambiar su propio rol" : "Cambiar rol y credenciales"}
-                          className={`
-                            ${currentUser?.username === user.username 
-                              ? "text-gray-400 cursor-not-allowed" 
-                              : "text-purple-600 hover:bg-purple-50"
-                            }
-                          `}
-                          disabled={currentUser?.username === user.username}
-                        >
-                          <Key className="h-4 w-4" />
-                        </Button>
-                        
-                        {/* Botón SUSPENDER/ACTIVAR */}
-                        {user.status === 'active' ? (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => openSuspendDialog(user)}
-                            title={currentUser?.username === user.username ? "No puede suspenderse a sí mismo" : "Suspender usuario"}
-                            className={`
-                              ${currentUser?.username === user.username 
-                                ? "text-gray-400 cursor-not-allowed" 
-                                : "text-red-600 hover:text-red-700 hover:bg-red-50"
-                              }
-                            `}
-                            disabled={currentUser?.username === user.username}
-                          >
-                            <Ban className="h-4 w-4" />
-                          </Button>
-                        ) : user.status === 'suspended' ? (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => openActivateDialog(user)}
-                            title="Activar usuario"
-                            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            title="Usuario inactivo"
-                            disabled
-                          >
-                            <Clock className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                    </TableRow>
-                  );
-                })}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3.5 w-3.5 text-gray-400" />
+                            <span className="text-sm text-dr-blue">{email}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-gray-700 capitalize">
+                            {role}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={statusInfo.className}>
+                            {statusInfo.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <div className="flex items-center gap-2 text-sm text-gray-700">
+                            <Building2 className="h-3.5 w-3.5 text-gray-400" />
+                            {department}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <div className="flex items-center gap-2 text-sm text-gray-700">
+                            <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                            {province}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell text-sm text-gray-600">
+                          {formatDateTime(createdAt)}
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell text-sm text-gray-600">
+                          {formatDateTime(lastLogin)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
 
-      {/* Modal VER USUARIO (Solo lectura) */}
-      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
-              <Eye className="h-5 w-5 text-dr-blue" />
-              Ver Detalles del Usuario
-            </DialogTitle>
-            <DialogDescription>
-              Información completa del usuario {selectedUser?.name}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedUser && (
-            <div className="space-y-6">
-              {/* User Info - Solo lectura */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">ID de Usuario</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.id}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Nombre de Usuario</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">@{selectedUser.username}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2 col-span-2">
-                  <Label className="text-sm font-medium text-gray-600">Nombre Completo</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.name}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2 col-span-2">
-                  <Label className="text-sm font-medium text-gray-600">Correo Electrónico</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.email}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Cargo</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.role}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Nivel de Rol</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    {getRoleBadge(selectedUser.roleLevel)}
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Estado</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    {getStatusBadge(selectedUser.status)}
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Departamento</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.department}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Provincia</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.province}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Último Acceso</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.lastLogin}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Fecha de Creación</Label>
-                  <div className="p-2 bg-gray-50 rounded-md">
-                    <p className="text-dr-dark-gray font-medium">{selectedUser.createdDate}</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Footer info */}
-              <div className="flex justify-between pt-4 border-t border-gray-200">
-                <div className="text-sm text-gray-600">
-                  <p>Usuario creado el {selectedUser.createdDate}</p>
-                  <p>Último acceso: {selectedUser.lastLogin}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewModal(false)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {isLoadingReferences && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <AlertCircle className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-700">
+            Cargando catálogos de roles, departamentos y provincias...
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {/* Modal EDITAR USUARIO (Campos editables) */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
-              <Edit3 className="h-5 w-5 text-green-600" />
-              Editar Usuario
-            </DialogTitle>
-            <DialogDescription>
-              Modificar información del usuario {editingUser?.name}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {editingUser && (
-            <div className="space-y-6">
-              {/* Campos editables */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 col-span-2">
-                  <Label htmlFor="edit-name">Nombre Completo *</Label>
-                  <Input
-                    id="edit-name"
-                    value={editingUser.name}
-                    onChange={(e) => setEditingUser({...editingUser, name: e.target.value})}
-                    placeholder="Nombre completo"
-                  />
-                </div>
-                
-                <div className="space-y-2 col-span-2">
-                  <Label htmlFor="edit-email">Correo Electrónico *</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    value={editingUser.email}
-                    onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
-                    placeholder="usuario@siuben.gob.do"
-                  />
-                </div>
-                
-                <div className="space-y-2 col-span-2">
-                  <Label htmlFor="edit-role">Título del Cargo</Label>
-                  <Input
-                    id="edit-role"
-                    value={editingUser.role}
-                    onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
-                    placeholder="Ej: Analista de Solicitudes"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-department">Departamento</Label>
-                  <Input
-                    id="edit-department"
-                    value={editingUser.department}
-                    onChange={(e) => setEditingUser({...editingUser, department: e.target.value})}
-                    placeholder="Ej: Evaluación"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-province">Provincia</Label>
-                  <Select 
-                    value={editingUser.province} 
-                    onValueChange={(value) => setEditingUser({...editingUser, province: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar provincia" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Distrito Nacional">Distrito Nacional</SelectItem>
-                      <SelectItem value="Santo Domingo">Santo Domingo</SelectItem>
-                      <SelectItem value="Santiago">Santiago</SelectItem>
-                      <SelectItem value="La Vega">La Vega</SelectItem>
-                      <SelectItem value="San Cristóbal">San Cristóbal</SelectItem>
-                      <SelectItem value="Azua">Azua</SelectItem>
-                      <SelectItem value="Barahona">Barahona</SelectItem>
-                      <SelectItem value="La Romana">La Romana</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {/* Campos no editables (solo lectura) */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">ID de Usuario</Label>
-                  <div className="p-2 bg-gray-100 rounded-md">
-                    <p className="text-gray-700">{editingUser.id}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Nombre de Usuario</Label>
-                  <div className="p-2 bg-gray-100 rounded-md">
-                    <p className="text-gray-700">@{editingUser.username}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Nivel de Rol</Label>
-                  <div className="p-2 bg-gray-100 rounded-md">
-                    {getRoleBadge(editingUser.roleLevel)}
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-600">Estado</Label>
-                  <div className="p-2 bg-gray-100 rounded-md">
-                    {getStatusBadge(editingUser.status)}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Información adicional */}
-              <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-dr-blue">
-                <div className="text-sm text-dr-dark-gray">
-                  <p><strong>Fecha de creación:</strong> {editingUser.createdDate}</p>
-                  <p><strong>Último acceso:</strong> {editingUser.lastLogin}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowEditModal(false);
-              setEditingUser(null);
-            }}>
-              Cancelar
-            </Button>
-            <Button 
-              onClick={handleSaveEditUser} 
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              Guardar Cambios
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Suspend User Dialog */}
-      <AlertDialog open={showSuspendDialog} onOpenChange={setShowSuspendDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-dr-dark-gray">
-              Suspender Usuario
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Está seguro que desea suspender al usuario <strong>{selectedUser?.name}</strong>?
-              Esta acción impedirá que el usuario acceda al sistema.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          
-          <div className="space-y-2">
-            <Label htmlFor="suspend-reason">Razón de la suspensión *</Label>
-            <Textarea
-              id="suspend-reason"
-              value={suspendReason}
-              onChange={(e) => setSuspendReason(e.target.value)}
-              placeholder="Describa la razón de la suspensión..."
-              rows={3}
-            />
-          </div>
-          
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setShowSuspendDialog(false);
-              setSelectedUser(null);
-              setSuspendReason('');
-            }}>
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleSuspendUser}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Suspender Usuario
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Activate User Dialog */}
-      <AlertDialog open={showActivateDialog} onOpenChange={setShowActivateDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-dr-dark-gray">
-              Activar Usuario
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Está seguro que desea activar al usuario <strong>{selectedUser?.name}</strong>?
-              Esta acción permitirá que el usuario acceda nuevamente al sistema.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setShowActivateDialog(false);
-              setSelectedUser(null);
-            }}>
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleActivateUser}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              Activar Usuario
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {currentUser?.permissions.canCreateUsers !== true && (
+        <>
+          <Separator />
+          <Alert className="border-amber-200 bg-amber-50">
+            <Shield className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              Su cuenta no tiene permisos para crear o modificar usuarios. Solo puede consultar la información.
+            </AlertDescription>
+          </Alert>
+        </>
+      )}
     </div>
   );
 }
