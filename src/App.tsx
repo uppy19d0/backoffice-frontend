@@ -11,7 +11,14 @@ import {
 } from './components/DashboardPages';
 import { UsersManagementPage } from './components/UsersManagementPage';
 import { SystemConfigPage } from './components/SystemConfigPage';
-import { ApiError, AuthProfile, LoginResult, getCurrentUser, login as loginRequest } from './services/api';
+import {
+  ApiError,
+  AuthProfile,
+  LoginResult,
+  getCurrentUser,
+  login as loginRequest,
+  updateOwnPassword,
+} from './services/api';
 
 type RoleLevel = 'administrador' | 'manager' | 'analista';
 
@@ -40,6 +47,88 @@ interface User {
   provinceName?: string | null;
   profile?: AuthProfile | null;
 }
+
+const STATUS_FIELD_CANDIDATES = ['status', 'accountStatus', 'state', 'userStatus', 'currentStatus'];
+const STATUS_KEYWORD_HINT = 'status';
+const ACTIVE_KEYWORDS = ['activo', 'active', 'enabled', '1', 'true'];
+const INACTIVE_KEYWORDS = ['inactivo', 'inactive', 'disabled', '0', 'false'];
+const SUSPENDED_KEYWORDS = ['suspendido', 'suspendida', 'suspended', '2'];
+
+const normalizeStatusValue = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const normalized = trimmed.toLowerCase();
+
+    if (SUSPENDED_KEYWORDS.includes(normalized)) {
+      return 2;
+    }
+    if (ACTIVE_KEYWORDS.includes(normalized)) {
+      return 1;
+    }
+    if (INACTIVE_KEYWORDS.includes(normalized)) {
+      return 0;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+};
+
+const extractStatusFromObject = (source?: Record<string, unknown> | null): number | undefined => {
+  if (!source) {
+    return undefined;
+  }
+
+  for (const candidate of STATUS_FIELD_CANDIDATES) {
+    if (candidate in source) {
+      const normalized = normalizeStatusValue(source[candidate]);
+      if (normalized !== undefined) {
+        return normalized;
+      }
+    }
+  }
+
+  for (const [key, rawValue] of Object.entries(source)) {
+    if (key.toLowerCase().includes(STATUS_KEYWORD_HINT)) {
+      const normalized = normalizeStatusValue(rawValue);
+      if (normalized !== undefined) {
+        return normalized;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const resolveUserStatus = (user?: User | null): number | undefined => {
+  if (!user) {
+    return undefined;
+  }
+
+  return (
+    normalizeStatusValue(user.status) ??
+    extractStatusFromObject(user.profile ? (user.profile as unknown as Record<string, unknown>) : null) ??
+    extractStatusFromObject(user.rawProfile ?? null)
+  );
+};
+
+const isSuspendedStatus = (value: unknown): boolean => normalizeStatusValue(value) === 2;
 
 const ROLE_PERMISSIONS: Record<RoleLevel, Permissions> = {
   administrador: {
@@ -279,6 +368,13 @@ const buildUserFromSources = ({
     existingRawProfile ??
     (profile ? (profile as Record<string, unknown>) : null);
 
+  const profileRecord = profile ? (profile as unknown as Record<string, unknown>) : null;
+  const status =
+    normalizeStatusValue(profile?.status) ??
+    extractStatusFromObject(profileRecord) ??
+    extractStatusFromObject(rawProfile) ??
+    (loginResult ? extractStatusFromObject(loginResult.raw) : undefined);
+
   const email =
     profile?.email ??
     pickFirstString(rawProfile, STRING_CANDIDATES.email, 'email') ??
@@ -321,12 +417,7 @@ const buildUserFromSources = ({
     id: profile?.id ?? pickFirstString(rawProfile, ['id'], 'id'),
     jobTitle:
       (profile?.jobTitle ?? pickFirstString(rawProfile, ['jobTitle', 'position'], 'job')) ?? null,
-    status:
-      typeof profile?.status === 'number'
-        ? profile.status
-        : typeof rawProfile?.status === 'number'
-          ? (rawProfile.status as number)
-          : undefined,
+    status,
     departmentId: profile?.departmentId ?? pickFirstString(rawProfile, ['departmentId'], 'department'),
     departmentName,
     provinceId: profile?.provinceId ?? pickFirstString(rawProfile, ['provinceId'], 'province'),
@@ -367,6 +458,14 @@ function App() {
       return;
     }
 
+    const storedStatus = resolveUserStatus(storedSession.user);
+    if (isSuspendedStatus(storedStatus)) {
+      clearSession();
+      setLoginError('Su cuenta está suspendida. Comuníquese con el administrador del sistema.');
+      setSessionChecked(true);
+      return;
+    }
+
     setAuthToken(storedSession.token);
     setCurrentUser(storedSession.user);
     setIsAuthenticated(true);
@@ -382,6 +481,16 @@ function App() {
           fallbackEmail: storedSession.user.email ?? storedSession.user.username ?? '',
           existingRawProfile: storedSession.user.rawProfile ?? null,
         });
+        const updatedStatus = resolveUserStatus(updatedUser);
+        if (isSuspendedStatus(updatedStatus)) {
+          clearSession();
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setAuthToken(null);
+          setCurrentPage('dashboard');
+          setLoginError('Su cuenta está suspendida. Comuníquese con el administrador del sistema.');
+          return;
+        }
         setCurrentUser(updatedUser);
         persistSession({
           token: storedSession.token,
@@ -411,6 +520,12 @@ function App() {
         profile,
         fallbackEmail: email,
       });
+
+      const statusValue = resolveUserStatus(user);
+      if (isSuspendedStatus(statusValue)) {
+        setLoginError('Su cuenta está suspendida. Comuníquese con el administrador del sistema.');
+        return;
+      }
 
       setAuthToken(result.token);
       setCurrentUser(user);
@@ -456,6 +571,55 @@ function App() {
     clearSession();
   };
 
+  const handlePasswordChange = async ({
+    username: _username,
+    currentPassword,
+    newPassword,
+  }: {
+    username: string;
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    if (!authToken) {
+      return {
+        success: false,
+        error: 'La sesión expiró. Inicie nuevamente para actualizar su contraseña.',
+      };
+    }
+
+    try {
+      await updateOwnPassword(authToken, { currentPassword, newPassword });
+      return { success: true };
+    } catch (error) {
+      console.error('Error actualizando contraseña del usuario', error);
+      let message = 'No se pudo actualizar la contraseña. Intente nuevamente.';
+
+      if (error instanceof ApiError) {
+        if (error.status === 401) {
+          handleLogout();
+          message = 'La sesión expiró. Inicie nuevamente.';
+        } else if (error.details && typeof error.details === 'object') {
+          const details = error.details as Record<string, unknown>;
+          const detailMessage =
+            (typeof details.message === 'string' && details.message.trim()) ||
+            (typeof details.error === 'string' && details.error.trim()) ||
+            null;
+          if (detailMessage) {
+            message = detailMessage;
+          } else if (error.message && error.message.trim().length > 0) {
+            message = error.message.trim();
+          }
+        } else if (error.message && error.message.trim().length > 0) {
+          message = error.message.trim();
+        }
+      } else if (error instanceof Error && error.message.trim().length > 0) {
+        message = error.message.trim();
+      }
+
+      return { success: false, error: message };
+    }
+  };
+
   if (!isAuthenticated) {
     if (!sessionChecked) {
       return null;
@@ -472,7 +636,7 @@ function App() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardOverview currentUser={currentUser} />;
+        return <DashboardOverview currentUser={currentUser} authToken={authToken} />;
       case 'users':
         if (!currentUser?.permissions.canCreateUsers) {
           return (
@@ -496,15 +660,15 @@ function App() {
           />
         );
       case 'beneficiaries':
-        return <BeneficiariesPage currentUser={currentUser} />;
+        return <BeneficiariesPage currentUser={currentUser} authToken={authToken} />;
       case 'requests':
-        return <RequestsPage currentUser={currentUser} />;
+        return <RequestsPage currentUser={currentUser} authToken={authToken} />;
       case 'reports':
-        return <ReportsPage currentUser={currentUser} />;
+        return <ReportsPage currentUser={currentUser} authToken={authToken} />;
       case 'config':
-        return <SystemConfigPage currentUser={currentUser} />;
+        return <SystemConfigPage currentUser={currentUser} authToken={authToken} />;
       default:
-        return <DashboardOverview currentUser={currentUser} />;
+        return <DashboardOverview currentUser={currentUser} authToken={authToken} />;
     }
   };
 
@@ -520,6 +684,7 @@ function App() {
           userPermissions={currentUser?.permissions}
           currentUser={currentUser}
           authToken={authToken}
+          onPasswordChange={handlePasswordChange}
         >
           {renderCurrentPage()}
         </DashboardLayout>

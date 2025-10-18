@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -6,15 +6,8 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
-import { 
-  Shield,
-  Activity,
-  Eye,
-  Search,
-  Filter,
-  Download,
-  RefreshCw
-} from 'lucide-react';
+import { ApiError, AuditEventDto, AuditSummaryDto, getAuditEvents, getAuditSummary } from '../services/api';
+import { Shield, Activity, Eye, Search, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface CurrentUser {
   username: string;
@@ -32,423 +25,512 @@ interface CurrentUser {
 
 interface PageProps {
   currentUser?: CurrentUser | null;
+  authToken?: string | null;
 }
 
-interface SystemLog {
-  id: string;
-  timestamp: string;
-  user: string;
-  action: string;
-  resource: string;
-  ip: string;
-  status: 'success' | 'failed' | 'warning';
-  details: string;
-  category: 'auth' | 'user' | 'request' | 'system' | 'security';
-}
+type AuditStatusKey = 'success' | 'failure' | 'unknown';
+type AuditCategoryKey = 'general' | 'security' | 'data' | 'system' | 'other';
 
-export function SystemConfigPage({ currentUser }: PageProps) {
-  // Estados para filtros de logs
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('today');
+const STATUS_LABELS: Record<AuditStatusKey, { label: string; badgeClass: string }> = {
+  success: {
+    label: 'Exitoso',
+    badgeClass: 'bg-green-100 text-green-800 border-green-200',
+  },
+  failure: {
+    label: 'Fallido',
+    badgeClass: 'bg-red-100 text-red-800 border-red-200',
+  },
+  unknown: {
+    label: 'Desconocido',
+    badgeClass: 'bg-gray-100 text-gray-700 border-gray-200',
+  },
+};
 
-  // Mock system logs expandido
-  const [systemLogs] = useState<SystemLog[]>([
-    {
-      id: 'LOG-001',
-      timestamp: '08/01/2025 10:15:32',
-      user: 'admin',
-      action: 'Inicio de Sesión',
-      resource: 'Sistema',
-      ip: '192.168.1.100',
-      status: 'success',
-      details: 'Inicio de sesión exitoso desde navegador Chrome',
-      category: 'auth'
-    },
-    {
-      id: 'LOG-002',
-      timestamp: '08/01/2025 10:12:45',
-      user: 'manager',
-      action: 'Aprobar Solicitud',
-      resource: 'Solicitud #2025-001234',
-      ip: '192.168.1.101',
-      status: 'success',
-      details: 'Solicitud de beneficio aprobada por gerente de operaciones',
-      category: 'request'
-    },
-    {
-      id: 'LOG-003',
-      timestamp: '08/01/2025 10:10:18',
-      user: 'analista',
-      action: 'Revisar Solicitud',
-      resource: 'Solicitud #2025-001235',
-      ip: '192.168.1.102',
-      status: 'success',
-      details: 'Solicitud enviada a revisión con recomendación de aprobación',
-      category: 'request'
-    },
-    {
-      id: 'LOG-004',
-      timestamp: '08/01/2025 09:55:33',
-      user: 'system',
-      action: 'Respaldo Automático',
-      resource: 'Base de datos',
-      ip: 'localhost',
-      status: 'success',
-      details: 'Respaldo automático de base de datos completado (2.3GB)',
-      category: 'system'
-    },
-    {
-      id: 'LOG-005',
-      timestamp: '08/01/2025 09:30:12',
-      user: 'admin',
-      action: 'Crear Usuario',
-      resource: 'Usuario: jperez',
-      ip: '192.168.1.100',
-      status: 'success',
-      details: 'Nuevo usuario analista creado: Juan Pérez (jperez)',
-      category: 'user'
-    },
-    {
-      id: 'LOG-006',
-      timestamp: '08/01/2025 09:15:44',
-      user: 'unknown',
-      action: 'Intento de Acceso',
-      resource: 'Sistema',
-      ip: '192.168.1.150',
-      status: 'failed',
-      details: 'Intento de inicio de sesión fallido - credenciales incorrectas (usuario: hacker)',
-      category: 'security'
-    },
-    {
-      id: 'LOG-007',
-      timestamp: '08/01/2025 09:00:15',
-      user: 'manager',
-      action: 'Suspender Usuario',
-      resource: 'Usuario: cperez',
-      ip: '192.168.1.101',
-      status: 'success',
-      details: 'Usuario Carmen Pérez suspendido por violación de política',
-      category: 'user'
-    },
-    {
-      id: 'LOG-008',
-      timestamp: '08/01/2025 08:45:22',
-      user: 'system',
-      action: 'Verificación de Integridad',
-      resource: 'Sistema de archivos',
-      ip: 'localhost',
-      status: 'success',
-      details: 'Verificación de integridad del sistema completada sin errores',
-      category: 'system'
-    },
-    {
-      id: 'LOG-009',
-      timestamp: '08/01/2025 08:30:11',
-      user: 'analista',
-      action: 'Exportar Reporte',
-      resource: 'Reporte mensual',
-      ip: '192.168.1.102',
-      status: 'success',
-      details: 'Reporte mensual de solicitudes exportado en formato PDF',
-      category: 'system'
-    },
-    {
-      id: 'LOG-010',
-      timestamp: '08/01/2025 08:15:33',
-      user: 'unknown',
-      action: 'Acceso No Autorizado',
-      resource: 'Página de administración',
-      ip: '203.0.113.45',
-      status: 'failed',
-      details: 'Intento de acceso directo a página de administración bloqueado',
-      category: 'security'
-    }
-  ]);
+const CATEGORY_LABELS: Record<AuditCategoryKey, string> = {
+  general: 'General',
+  security: 'Seguridad',
+  data: 'Datos',
+  system: 'Sistema',
+  other: 'Otro',
+};
 
-  // Filtrar logs
-  const filteredLogs = systemLogs.filter(log => {
-    const matchesSearch = log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         log.resource.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         log.details.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || log.status === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || log.category === categoryFilter;
-    
-    return matchesSearch && matchesStatus && matchesCategory;
-  });
+const DATE_KEYS = ['occurredAt', 'occurred_at', 'createdAt', 'created_at', 'timestamp'];
+const USER_KEYS = ['userName', 'username', 'user', 'user_name'];
+const ACTION_KEYS = ['action', 'event', 'operation'];
+const RESOURCE_KEYS = ['resource', 'target', 'entity'];
+const DETAIL_KEYS = ['detail', 'description', 'message', 'metadata'];
+const CORRELATION_KEYS = ['correlationId', 'correlation_id', 'traceId', 'trace_id'];
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">
-          Exitoso
-        </Badge>;
-      case 'failed':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">
-          Fallido
-        </Badge>;
-      case 'warning':
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">
-          Advertencia
-        </Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+const SUCCESS_TOKENS = new Set(['success', 'successful', 'true', 'ok', '0']);
+const FAILURE_TOKENS = new Set(['failure', 'failed', 'false', 'error', '1']);
 
-  const getCategoryBadge = (category: string) => {
-    switch (category) {
-      case 'auth':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-          Autenticación
-        </Badge>;
-      case 'user':
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-          Usuarios
-        </Badge>;
-      case 'request':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-          Solicitudes
-        </Badge>;
-      case 'system':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-          Sistema
-        </Badge>;
-      case 'security':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-          Seguridad
-        </Badge>;
-      default:
-        return <Badge variant="outline">{category}</Badge>;
-    }
-  };
+const CATEGORY_TOKENS: Record<string, AuditCategoryKey> = {
+  general: 'general',
+  0: 'general',
+  security: 'security',
+  1: 'security',
+  data: 'data',
+  datos: 'data',
+  2: 'data',
+  system: 'system',
+  sistema: 'system',
+  3: 'system',
+  other: 'other',
+  otro: 'other',
+  4: 'other',
+};
 
-  const handleExportLogs = () => {
-    // Simular exportación de logs
-    alert('Exportando logs del sistema...');
-  };
+const HOURS_FILTERS: Record<'24h' | '72h' | '168h', number> = {
+  '24h': 24,
+  '72h': 72,
+  '168h': 168,
+};
 
-  const handleRefreshLogs = () => {
-    // Simular actualización de logs
-    alert('Actualizando logs del sistema...');
-  };
-
-  if (!currentUser?.permissions.canCreateUsers) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Alert className="max-w-md">
-          <Shield className="h-4 w-4" />
-          <AlertDescription>
-            No tiene permisos suficientes para acceder a los logs del sistema.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
+const toNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
   }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const resolveStringField = (source: AuditEventDto, keys: string[], fallback = ''): string => {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return fallback;
+};
+
+const resolveAuditDate = (event: AuditEventDto): Date | null => {
+  for (const key of DATE_KEYS) {
+    const value = event[key];
+    if (typeof value === 'string' && value) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+};
+
+const normalizeAuditStatus = (event: AuditEventDto): AuditStatusKey => {
+  const raw = event.status;
+  if (typeof raw === 'number') {
+    return raw === 0 ? 'success' : raw === 1 ? 'failure' : 'unknown';
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    const normalized = raw.trim().toLowerCase();
+    if (SUCCESS_TOKENS.has(normalized)) {
+      return 'success';
+    }
+    if (FAILURE_TOKENS.has(normalized)) {
+      return 'failure';
+    }
+  }
+  return 'unknown';
+};
+
+const normalizeAuditCategory = (event: AuditEventDto): AuditCategoryKey => {
+  const raw = event.category;
+  if (typeof raw === 'number' || typeof raw === 'string') {
+    const token = String(raw).trim().toLowerCase();
+    if (token in CATEGORY_TOKENS) {
+      return CATEGORY_TOKENS[token];
+    }
+  }
+  return 'general';
+};
+
+const formatDateTime = (value: Date | null): string => {
+  if (!value) {
+    return '—';
+  }
+  return value.toLocaleString('es-DO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};
+
+const formatNumber = (value?: number): string => {
+  if (value === undefined || Number.isNaN(value)) {
+    return '—';
+  }
+  return value.toLocaleString('es-DO');
+};
+
+const formatPercentage = (value?: number): string => {
+  if (value === undefined || Number.isNaN(value)) {
+    return '—';
+  }
+  return `${(value * 100).toFixed(1)}%`;
+};
+
+export function SystemConfigPage({ authToken }: PageProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | AuditStatusKey>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | AuditCategoryKey>('all');
+  const [dateFilter, setDateFilter] = useState<'24h' | '72h' | '168h'>('24h');
+  const [auditEvents, setAuditEvents] = useState<AuditEventDto[]>([]);
+  const [summary, setSummary] = useState<AuditSummaryDto | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAuditData = useCallback(async () => {
+    if (!authToken) {
+      setError('Debe iniciar sesión nuevamente para consultar la auditoría.');
+      setAuditEvents([]);
+      setSummary(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const [events, summaryResponse] = await Promise.all([
+        getAuditEvents(authToken, { take: 200, skip: 0 }),
+        getAuditSummary(authToken, HOURS_FILTERS[dateFilter]),
+      ]);
+
+      setAuditEvents(events);
+      setSummary(summaryResponse ?? null);
+    } catch (err) {
+      console.error('Error cargando eventos de auditoría', err);
+      let message = 'No se pudo obtener el registro de auditoría.';
+
+      if (err instanceof ApiError) {
+        if (err.status === 401 || err.status === 403) {
+          message = 'No tiene permisos para consultar los eventos de auditoría.';
+        } else if (err.message && err.message.trim().length > 0) {
+          message = err.message.trim();
+        }
+      } else if (err instanceof Error && err.message.trim().length > 0) {
+        message = err.message.trim();
+      }
+
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authToken, dateFilter]);
+
+  useEffect(() => {
+    void loadAuditData();
+  }, [loadAuditData]);
+
+  const hoursRangeMs = HOURS_FILTERS[dateFilter] * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const sortedEvents = useMemo(() => {
+    const events = [...auditEvents];
+    events.sort((a, b) => {
+      const dateA = resolveAuditDate(a);
+      const dateB = resolveAuditDate(b);
+      if (dateA && dateB) {
+        return dateB.getTime() - dateA.getTime();
+      }
+      if (dateA) return -1;
+      if (dateB) return 1;
+      return 0;
+    });
+    return events;
+  }, [auditEvents]);
+
+  const filteredLogs = useMemo(() => {
+    return sortedEvents.filter((event) => {
+      const status = normalizeAuditStatus(event);
+      const category = normalizeAuditCategory(event);
+      const occurredAt = resolveAuditDate(event);
+
+      if (statusFilter !== 'all' && status !== statusFilter) {
+        return false;
+      }
+      if (categoryFilter !== 'all' && category !== categoryFilter) {
+        return false;
+      }
+
+      if (occurredAt && now - occurredAt.getTime() > hoursRangeMs) {
+        return false;
+      }
+
+      if (normalizedSearch) {
+        const haystack = [
+          resolveStringField(event, USER_KEYS),
+          resolveStringField(event, ACTION_KEYS),
+          resolveStringField(event, RESOURCE_KEYS),
+          resolveStringField(event, DETAIL_KEYS),
+          resolveStringField(event, CORRELATION_KEYS),
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        if (!haystack.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [sortedEvents, statusFilter, categoryFilter, normalizedSearch, hoursRangeMs, now]);
+
+  const latestEventDate = useMemo(() => {
+    const date = resolveAuditDate(sortedEvents[0] ?? {});
+    return formatDateTime(date);
+  }, [sortedEvents]);
+
+  const totalEvents = toNumber(summary?.totalEvents) ?? auditEvents.length;
+  const successfulEvents = toNumber(summary?.successfulLast24Hours);
+  const failedEvents = toNumber(summary?.failedLast24Hours);
+  const securityEvents = toNumber(summary?.securityEventsLast24Hours);
+  const successRate = summary?.successRateLast24Hours;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-dr-dark-gray">Logs del Sistema</h2>
-          <p className="text-gray-600">Registro de actividades y eventos del sistema SIUBEN</p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleRefreshLogs}
-            className="border-gray-300"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Actualizar
-          </Button>
-          <Button 
-            onClick={handleExportLogs}
-            className="bg-dr-blue hover:bg-dr-blue-dark text-white"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-dr-dark-gray">Auditoría del Sistema</h1>
+        <p className="text-gray-600 mt-1">
+          Monitoree la actividad clave del backoffice SIUBEN, identifique incidentes y audite operaciones críticas.
+        </p>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Eventos</CardTitle>
-            <Activity className="h-4 w-4 text-dr-blue" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">{systemLogs.length}</div>
-            <p className="text-xs text-gray-600 mt-1">Últimas 24 horas</p>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-50 p-2 rounded-full">
+                <Activity className="h-5 w-5 text-dr-blue" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Eventos registrados</p>
+                <p className="text-xl font-bold text-dr-dark-gray">
+                  {formatNumber(totalEvents)}
+                </p>
+                <p className="text-xs text-gray-500">Última actualización: {latestEventDate}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Eventos Exitosos</CardTitle>
-            <Activity className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">
-              {systemLogs.filter(log => log.status === 'success').length}
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-50 p-2 rounded-full">
+                <Shield className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Éxitos últimas 24h</p>
+                <p className="text-xl font-bold text-dr-dark-gray">
+                  {formatNumber(successfulEvents)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Tasa de éxito: {formatPercentage(successRate)}
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 mt-1">
-              {Math.round((systemLogs.filter(log => log.status === 'success').length / systemLogs.length) * 100)}% del total
-            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Eventos Fallidos</CardTitle>
-            <Activity className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">
-              {systemLogs.filter(log => log.status === 'failed').length}
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-red-50 p-2 rounded-full">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Fallos últimas 24h</p>
+                <p className="text-xl font-bold text-dr-dark-gray">
+                  {formatNumber(failedEvents)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Eventos críticos: {formatNumber(toNumber(summary?.criticalEventsLast24Hours))}
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 mt-1">Requieren atención</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Eventos de Seguridad</CardTitle>
-            <Shield className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-dr-dark-gray">
-              {systemLogs.filter(log => log.category === 'security').length}
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-50 p-2 rounded-full">
+                <Eye className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Eventos de seguridad (24h)</p>
+                <p className="text-xl font-bold text-dr-dark-gray">
+                  {formatNumber(securityEvents)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Rango consultado: {HOURS_FILTERS[dateFilter]}h
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 mt-1">Eventos críticos</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input 
-            placeholder="Buscar en logs..." 
-            className="pl-10 border-gray-300" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2 sm:gap-4">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] border-gray-300">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los Estados</SelectItem>
-              <SelectItem value="success">Exitoso</SelectItem>
-              <SelectItem value="failed">Fallido</SelectItem>
-              <SelectItem value="warning">Advertencia</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] border-gray-300">
-              <SelectValue placeholder="Categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las Categorías</SelectItem>
-              <SelectItem value="auth">Autenticación</SelectItem>
-              <SelectItem value="user">Usuarios</SelectItem>
-              <SelectItem value="request">Solicitudes</SelectItem>
-              <SelectItem value="system">Sistema</SelectItem>
-              <SelectItem value="security">Seguridad</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] border-gray-300">
-              <SelectValue placeholder="Fecha" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Hoy</SelectItem>
-              <SelectItem value="week">Esta Semana</SelectItem>
-              <SelectItem value="month">Este Mes</SelectItem>
-              <SelectItem value="all">Todo el Tiempo</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar por usuario, acción, recurso o detalle..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+                <SelectTrigger className="min-w-[140px]">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="success">Exitosos</SelectItem>
+                  <SelectItem value="failure">Fallidos</SelectItem>
+                  <SelectItem value="unknown">Desconocido</SelectItem>
+                </SelectContent>
+              </Select>
 
-      {/* Logs Table */}
-      <Card className="border border-gray-200">
+              <Select
+                value={categoryFilter}
+                onValueChange={(value) => setCategoryFilter(value as typeof categoryFilter)}
+              >
+                <SelectTrigger className="min-w-[160px]">
+                  <SelectValue placeholder="Categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las categorías</SelectItem>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="security">Seguridad</SelectItem>
+                  <SelectItem value="data">Datos</SelectItem>
+                  <SelectItem value="system">Sistema</SelectItem>
+                  <SelectItem value="other">Otra</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as typeof dateFilter)}>
+                <SelectTrigger className="min-w-[160px]">
+                  <SelectValue placeholder="Rango de tiempo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="24h">Últimas 24 horas</SelectItem>
+                  <SelectItem value="72h">Últimas 72 horas</SelectItem>
+                  <SelectItem value="168h">Últimos 7 días</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                type="button"
+                onClick={() => void loadAuditData()}
+                className="gap-2 bg-dr-blue hover:bg-dr-blue-dark text-white"
+                disabled={isLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Actualizar
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-700">{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Registro de auditoría</CardTitle>
+          <CardDescription>
+            {filteredLogs.length} evento{filteredLogs.length === 1 ? '' : 's'} mostrado{filteredLogs.length === 1 ? '' : 's'} de {auditEvents.length} recibidos.
+          </CardDescription>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-dr-dark-gray">ID</TableHead>
-                  <TableHead className="text-dr-dark-gray min-w-[140px]">Fecha/Hora</TableHead>
-                  <TableHead className="text-dr-dark-gray">Usuario</TableHead>
-                  <TableHead className="text-dr-dark-gray">Acción</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden lg:table-cell">Recurso</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden xl:table-cell">IP</TableHead>
-                  <TableHead className="text-dr-dark-gray">Estado</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden sm:table-cell">Categoría</TableHead>
-                  <TableHead className="w-[50px]">Detalle</TableHead>
+                  <TableHead className="min-w-[160px]">Fecha</TableHead>
+                  <TableHead className="min-w-[160px]">Usuario</TableHead>
+                  <TableHead className="min-w-[160px]">Acción</TableHead>
+                  <TableHead className="min-w-[200px]">Recurso</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead className="min-w-[240px]">Detalle</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLogs.length === 0 ? (
+                {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                      No se encontraron logs que coincidan con los filtros aplicados
+                    <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                      Cargando eventos de auditoría...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                      No se encontraron eventos que coincidan con los filtros seleccionados.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="font-medium text-dr-blue">{log.id}</TableCell>
-                      <TableCell className="text-dr-dark-gray text-sm">
-                        {log.timestamp}
-                      </TableCell>
-                      <TableCell className="text-dr-dark-gray">
-                        <span className="font-medium">{log.user}</span>
-                      </TableCell>
-                      <TableCell className="text-dr-dark-gray">{log.action}</TableCell>
-                      <TableCell className="text-dr-dark-gray hidden lg:table-cell text-sm">
-                        {log.resource}
-                      </TableCell>
-                      <TableCell className="text-dr-dark-gray hidden xl:table-cell text-sm font-mono">
-                        {log.ip}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(log.status)}</TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        {getCategoryBadge(log.category)}
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          title={log.details}
-                          onClick={() => alert(log.details)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredLogs.map((event) => {
+                    const status = normalizeAuditStatus(event);
+                    const category = normalizeAuditCategory(event);
+                    const eventDate = formatDateTime(resolveAuditDate(event));
+                    const user = resolveStringField(event, USER_KEYS, '—');
+                    const action = resolveStringField(event, ACTION_KEYS, '—');
+                    const resource = resolveStringField(event, RESOURCE_KEYS, '—');
+                    const detail = resolveStringField(event, DETAIL_KEYS, '—') || '—';
+
+                    return (
+                      <TableRow key={event.id ?? `${eventDate}-${action}-${resource}`}>
+                        <TableCell>{eventDate}</TableCell>
+                        <TableCell>{user}</TableCell>
+                        <TableCell>{action}</TableCell>
+                        <TableCell className="whitespace-nowrap">{resource}</TableCell>
+                        <TableCell>
+                          <Badge className={STATUS_LABELS[status].badgeClass}>
+                            {STATUS_LABELS[status].label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{CATEGORY_LABELS[category]}</TableCell>
+                        <TableCell>
+                          <p className="text-sm text-gray-700 line-clamp-3">{detail}</p>
+                          {event.correlationId && (
+                            <p className="text-xs text-gray-500 mt-1">ID correlación: {event.correlationId}</p>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
-
-      {/* Summary */}
-      <div className="text-sm text-gray-600">
-        Mostrando {filteredLogs.length} de {systemLogs.length} eventos del sistema
-      </div>
     </div>
   );
 }

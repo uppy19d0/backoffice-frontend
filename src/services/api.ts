@@ -161,38 +161,92 @@ export async function login(email: string, password: string): Promise<LoginResul
   };
 }
 
+const COLLECTION_KEY_CANDIDATES = [
+  'items',
+  'data',
+  'results',
+  'value',
+  'values',
+  'records',
+  'rows',
+  'entries',
+  'notifications',
+  'list',
+  'collection',
+  'payload',
+];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const extractArrayFromPayload = (
+  payload: unknown,
+  visited: WeakSet<object> = new WeakSet(),
+): unknown[] | null => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (!isRecord(payload) || visited.has(payload)) {
+    return null;
+  }
+
+  visited.add(payload);
+
+  for (const key of COLLECTION_KEY_CANDIDATES) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  for (const key of COLLECTION_KEY_CANDIDATES) {
+    const value = payload[key];
+    if (isRecord(value)) {
+      const nested = extractArrayFromPayload(value, visited);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    if (isRecord(value)) {
+      const nested = extractArrayFromPayload(value, visited);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
+};
+
 /**
- * Normalises array-like responses (plain array, { items: [] }, { data: [] }).
+ * Normalises array-like responses (plain array, { items: [] }, { data: [] })
+ * and nested variants frequently seen in backends ({ data: { items: [] } }, etc.).
  */
 function normalizeCollection<T = Record<string, unknown>>(payload: unknown): T[] {
-  if (Array.isArray(payload)) {
-    return payload as T[];
-  }
-
-  if (payload && typeof payload === 'object') {
-    const container = payload as Record<string, unknown>;
-    if (Array.isArray(container.items)) {
-      return container.items as T[];
-    }
-    if (Array.isArray(container.data)) {
-      return container.data as T[];
-    }
-    if (Array.isArray(container.results)) {
-      return container.results as T[];
-    }
-  }
-
-  return [];
+  const collection = extractArrayFromPayload(payload);
+  return Array.isArray(collection) ? (collection as T[]) : [];
 }
 
 export interface AdminUserDto extends Record<string, unknown> {
   id?: string;
+  userId?: string;
   email?: string;
   userName?: string;
   fullName?: string;
   name?: string;
   jobTitle?: string;
   role?: string;
+  roleId?: string;
   status?: number | string;
   departmentId?: string | null;
   departmentName?: string | null;
@@ -237,6 +291,10 @@ export async function getProvinces(token: string): Promise<ReferenceItem[]> {
   return normalizeCollection<ReferenceItem>(response);
 }
 
+export async function getUserById(token: string, userId: string): Promise<AdminUserDto> {
+  return apiFetch<AdminUserDto>(`/admin/users/${encodeURIComponent(userId)}`, { token });
+}
+
 export interface CreateUserPayload {
   email: string;
   fullName: string;
@@ -254,6 +312,235 @@ export async function createUser(token: string, payload: CreateUserPayload): Pro
     token,
     body: payload,
   });
+}
+
+export interface UpdateUserRolePayload {
+  roleId: string;
+}
+
+export async function updateUserRole(
+  token: string,
+  userId: string,
+  payload: UpdateUserRolePayload,
+): Promise<void> {
+  await apiFetch(`/admin/users/${encodeURIComponent(userId)}/role`, {
+    method: 'PATCH',
+    token,
+    body: payload,
+  });
+}
+
+export async function resetUserPassword(
+  token: string,
+  userId: string,
+  newPassword: string,
+): Promise<void> {
+  await apiFetch(`/admin/users/${encodeURIComponent(userId)}/password`, {
+    method: 'POST',
+    token,
+    body: { newPassword },
+  });
+}
+
+export async function enableUser(token: string, userId: string): Promise<void> {
+  await apiFetch(`/admin/users/${encodeURIComponent(userId)}/enable`, {
+    method: 'POST',
+    token,
+  });
+}
+
+export async function disableUser(token: string, userId: string): Promise<void> {
+  await apiFetch(`/admin/users/${encodeURIComponent(userId)}/disable`, {
+    method: 'POST',
+    token,
+  });
+}
+
+export interface UpdateOwnPasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export async function updateOwnPassword(
+  token: string,
+  payload: UpdateOwnPasswordPayload,
+): Promise<void> {
+  await apiFetch('/auth/me/password', {
+    method: 'PATCH',
+    token,
+    body: payload,
+  });
+}
+
+export interface AuditEventDto extends Record<string, unknown> {
+  id?: string;
+  occurredAt?: string;
+  userId?: string | null;
+  userName?: string | null;
+  action?: string;
+  resource?: string;
+  status?: number | string;
+  category?: number | string;
+  detail?: string | null;
+  metadataJson?: string | null;
+  correlationId?: string | null;
+}
+
+export interface AuditSummaryDto extends Record<string, unknown> {
+  totalEvents?: number;
+  successfulLast24Hours?: number;
+  successRateLast24Hours?: number;
+  failedLast24Hours?: number;
+  securityEventsLast24Hours?: number;
+  criticalEventsLast24Hours?: number;
+}
+
+export interface ListAuditEventsOptions {
+  take?: number;
+  skip?: number;
+}
+
+export async function getAuditEvents(
+  token: string,
+  options: ListAuditEventsOptions = {},
+): Promise<AuditEventDto[]> {
+  const params = new URLSearchParams();
+  if (typeof options.take === 'number') {
+    params.set('take', String(options.take));
+  }
+  if (typeof options.skip === 'number') {
+    params.set('skip', String(options.skip));
+  }
+
+  const path = params.toString() ? `/audit?${params.toString()}` : '/audit';
+  const response = await apiFetch<unknown>(path, { token });
+  return normalizeCollection<AuditEventDto>(response);
+}
+
+export async function getAuditSummary(token: string, hours = 24): Promise<AuditSummaryDto> {
+  const clampedHours = Math.min(Math.max(Math.trunc(hours), 1), 168);
+  const params = new URLSearchParams({ hours: String(clampedHours) });
+  return apiFetch<AuditSummaryDto>(`/audit/summary?${params.toString()}`, { token });
+}
+
+export interface BeneficiaryDto extends Record<string, unknown> {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  nationalId?: string;
+  email?: string | null;
+  phoneNumber?: string | null;
+  dateOfBirth?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string | null;
+}
+
+export interface PagedResult<T> {
+  items: T[];
+  totalCount: number;
+  pageNumber: number;
+  pageSize: number;
+  totalPages?: number;
+  hasPreviousPage?: boolean;
+  hasNextPage?: boolean;
+}
+
+const normalizePagedResult = <T>(payload: unknown): PagedResult<T> => {
+  const fallback: PagedResult<T> = {
+    items: [],
+    totalCount: 0,
+    pageNumber: 1,
+    pageSize: 0,
+  };
+
+  if (!payload || typeof payload !== 'object') {
+    return fallback;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const items =
+    Array.isArray(record.items) && record.items.length >= 0
+      ? (record.items as T[])
+      : Array.isArray(record.data) && record.data.length >= 0
+        ? (record.data as T[])
+        : Array.isArray(record.results) && record.results.length >= 0
+          ? (record.results as T[])
+          : [];
+
+  const totalCount =
+    typeof record.totalCount === 'number'
+      ? record.totalCount
+      : typeof record.count === 'number'
+        ? record.count
+        : items.length;
+
+  const pageNumber =
+    typeof record.pageNumber === 'number'
+      ? record.pageNumber
+      : typeof record.page === 'number'
+        ? record.page
+        : 1;
+
+  const pageSize =
+    typeof record.pageSize === 'number'
+      ? record.pageSize
+      : typeof record.limit === 'number'
+        ? record.limit
+        : items.length;
+
+  const totalPages =
+    typeof record.totalPages === 'number'
+      ? record.totalPages
+      : pageSize > 0
+        ? Math.max(1, Math.ceil(totalCount / pageSize))
+        : undefined;
+
+  const hasPreviousPage =
+    typeof record.hasPreviousPage === 'boolean'
+      ? record.hasPreviousPage
+      : pageNumber > 1;
+
+  const hasNextPage =
+    typeof record.hasNextPage === 'boolean'
+      ? record.hasNextPage
+      : typeof totalPages === 'number'
+        ? pageNumber < totalPages
+        : false;
+
+  return {
+    items,
+    totalCount,
+    pageNumber,
+    pageSize,
+    totalPages,
+    hasPreviousPage,
+    hasNextPage,
+  };
+};
+
+export interface SearchBeneficiariesOptions {
+  search?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export async function searchBeneficiaries(
+  token: string,
+  { search, pageNumber = 1, pageSize = 25 }: SearchBeneficiariesOptions = {},
+): Promise<PagedResult<BeneficiaryDto>> {
+  const params = new URLSearchParams();
+  if (search && search.trim().length > 0) {
+    params.set('search', search.trim());
+  }
+  params.set('pageNumber', String(Math.max(1, pageNumber)));
+  params.set('pageSize', String(Math.min(Math.max(1, pageSize), 200)));
+
+  const response = await apiFetch<unknown>(`/admin/beneficiaries?${params.toString()}`, {
+    token,
+  });
+
+  return normalizePagedResult<BeneficiaryDto>(response);
 }
 
 export interface AuthProfile extends Record<string, unknown> {
@@ -319,4 +606,145 @@ export async function markNotificationRead(token: string, notificationId: string
     method: 'POST',
     token,
   });
+}
+
+export interface RequestDto extends Record<string, unknown> {
+  id?: string;
+  applicant?: string;
+  cedula?: string;
+  status?: string;
+  date?: string;
+  province?: string;
+  type?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  householdSize?: number;
+  monthlyIncome?: string;
+  reason?: string;
+  description?: string;
+  documents?: string[];
+  assignedTo?: string | null;
+  reviewedBy?: string | null;
+  reviewDate?: string | null;
+  priority?: string;
+  assignmentDate?: string | null;
+  assignmentNotes?: string | null;
+}
+
+export interface ListRequestsOptions {
+  status?: string;
+  priority?: string;
+  search?: string;
+  take?: number;
+  skip?: number;
+}
+
+export async function getRequests(
+  token: string,
+  options: ListRequestsOptions = {},
+): Promise<RequestDto[]> {
+  const params = new URLSearchParams();
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.priority) {
+    params.set('priority', options.priority);
+  }
+  if (options.search) {
+    params.set('search', options.search);
+  }
+  if (typeof options.take === 'number') {
+    params.set('take', String(options.take));
+  }
+  if (typeof options.skip === 'number') {
+    params.set('skip', String(options.skip));
+  }
+
+  const path = params.toString() ? `/requests?${params.toString()}` : '/requests';
+  const response = await apiFetch<unknown>(path, { token });
+  return normalizeCollection<RequestDto>(response);
+}
+
+// Report DTOs matching backend
+export interface RequestCountReportDto extends Record<string, unknown> {
+  totalRequests?: number;
+  pendingRequests?: number;
+  assignedRequests?: number;
+  inReviewRequests?: number;
+  approvedRequests?: number;
+  rejectedRequests?: number;
+}
+
+export interface MonthlyRequestReportDto extends Record<string, unknown> {
+  year?: number;
+  month?: number;
+  totalRequests?: number;
+  requestsByStatus?: Record<string, number>;
+  requestsByType?: Record<string, number>;
+}
+
+export interface MonthlyData extends Record<string, unknown> {
+  month?: number;
+  monthName?: string;
+  totalRequests?: number;
+  pendingRequests?: number;
+  approvedRequests?: number;
+  rejectedRequests?: number;
+}
+
+export interface AnnualRequestReportDto extends Record<string, unknown> {
+  year?: number;
+  totalRequests?: number;
+  monthlyData?: MonthlyData[];
+}
+
+export interface ActiveUsersReportDto extends Record<string, unknown> {
+  totalActiveUsers?: number;
+  usersByDepartment?: Record<string, number>;
+  usersByProvince?: Record<string, number>;
+  recentLogins?: number;
+}
+
+export interface UsersByRoleItem extends Record<string, unknown> {
+  roleName?: string;
+  userCount?: number;
+  users?: Array<{
+    userId?: string;
+    userName?: string;
+    email?: string;
+  }>;
+}
+
+export interface UsersByRoleReportResponse extends Record<string, unknown> {
+  totalUsers?: number;
+  roleGroups?: UsersByRoleItem[];
+}
+
+// Report API functions
+export async function getRequestCountReport(token: string): Promise<RequestCountReportDto> {
+  return apiFetch<RequestCountReportDto>('/reports/requests/count', { token });
+}
+
+export async function getMonthlyRequestReport(
+  token: string,
+  year: number,
+  month: number,
+): Promise<MonthlyRequestReportDto> {
+  return apiFetch<MonthlyRequestReportDto>(`/reports/requests/monthly/${year}/${month}`, { token });
+}
+
+export async function getAnnualRequestReport(
+  token: string,
+  year: number,
+): Promise<AnnualRequestReportDto> {
+  return apiFetch<AnnualRequestReportDto>(`/reports/requests/annual/${year}`, { token });
+}
+
+export async function getActiveUsersReport(token: string): Promise<ActiveUsersReportDto> {
+  return apiFetch<ActiveUsersReportDto>('/reports/users/active', { token });
+}
+
+export async function getUsersByRoleReport(token: string): Promise<UsersByRoleReportResponse> {
+  return apiFetch<UsersByRoleReportResponse>('/reports/users/by-role', { token });
 }

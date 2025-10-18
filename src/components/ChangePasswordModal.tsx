@@ -33,7 +33,11 @@ interface ChangePasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: CurrentUser;
-  onPasswordChange: (username: string, newPassword: string) => Promise<boolean>;
+  onPasswordChange: (payload: {
+    username: string;
+    currentPassword: string;
+    newPassword: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   onValidateCurrentPassword?: (username: string, currentPassword: string) => Promise<boolean>;
 }
 
@@ -124,16 +128,17 @@ export function ChangePasswordModal({
       }
 
       // Actualizar la contraseña
-      const success = await onPasswordChange(
-        currentUser.username, 
-        formData.newPassword
-      );
+      const result = await onPasswordChange({
+        username: currentUser.username,
+        currentPassword: formData.currentPassword,
+        newPassword: formData.newPassword,
+      });
 
-      if (success) {
+      if (result.success) {
         toast.success('Contraseña actualizada exitosamente');
         onClose();
       } else {
-        setErrors(['Error al actualizar la contraseña. Inténtelo nuevamente.']);
+        setErrors([result.error ?? 'Error al actualizar la contraseña. Inténtelo nuevamente.']);
       }
     } catch (error) {
       setErrors(['Error al actualizar la contraseña. Inténtelo nuevamente.']);

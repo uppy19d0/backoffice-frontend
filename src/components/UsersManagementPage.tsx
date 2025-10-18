@@ -18,10 +18,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Alert, AlertDescription } from './ui/alert';
 import { Separator } from './ui/separator';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
+import {
   AlertCircle,
+  Ban,
   Building2,
+  CheckCircle2,
+  Eye,
+  Key,
   Mail,
   MapPin,
+  Pencil,
   RefreshCw,
   Shield,
   UserPlus,
@@ -31,13 +46,19 @@ import {
   AdminUserDto,
   ApiError,
   ReferenceItem,
+  disableUser,
   createUser,
+  enableUser,
   getAdminUsers,
+  getUserById,
   getDepartments,
   getNonAdminUsers,
   getProvinces,
   getRoles,
+  resetUserPassword,
+  updateUserRole,
 } from '../services/api';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 interface CurrentUser {
   username: string;
@@ -57,6 +78,44 @@ interface CurrentUser {
 interface UsersManagementPageProps {
   currentUser?: CurrentUser | null;
   authToken: string | null;
+}
+
+interface ViewDialogState {
+  open: boolean;
+  userId: string | null;
+  summary: AdminUserDto | null;
+  details: AdminUserDto | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+interface RoleDialogState {
+  open: boolean;
+  userId: string | null;
+  user: AdminUserDto | null;
+  selectedRole: string;
+  isSubmitting: boolean;
+  error: string | null;
+}
+
+interface PasswordDialogState {
+  open: boolean;
+  userId: string | null;
+  user: AdminUserDto | null;
+  newPassword: string;
+  isSubmitting: boolean;
+  error: string | null;
+}
+
+type StatusAction = 'enable' | 'disable';
+
+interface StatusDialogState {
+  open: boolean;
+  userId: string | null;
+  user: AdminUserDto | null;
+  action: StatusAction;
+  isSubmitting: boolean;
+  error: string | null;
 }
 
 const resolveString = (
@@ -118,6 +177,17 @@ const resolveStatusDescriptor = (
   return { label: 'Desconocido', className: 'bg-gray-100 text-gray-700 border-gray-200' };
 };
 
+const isActiveStatus = (status: AdminUserDto['status']): boolean => {
+  if (typeof status === 'number') {
+    return status === 1;
+  }
+  if (typeof status === 'string') {
+    const normalized = status.toLowerCase();
+    return ['1', 'active', 'activo', 'enabled', 'true'].includes(normalized);
+  }
+  return false;
+};
+
 const formatDateTime = (value?: string | null): string => {
   if (!value) {
     return '—';
@@ -160,6 +230,27 @@ const resolveOptionLabel = (item: ReferenceItem): string => {
     }
   }
   return resolveOptionValue(item);
+};
+
+const USER_IDENTIFIER_KEYS = [
+  'id',
+  'userId',
+  'code',
+  'userCode',
+  'username',
+  'userName',
+  'email',
+];
+
+const resolveUserIdentifier = (user: AdminUserDto): string | null => {
+  const record = user as Record<string, unknown>;
+  for (const key of USER_IDENTIFIER_KEYS) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
 };
 
 const UNASSIGNED_VALUE = '__none__';
@@ -214,6 +305,42 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
   const [createServersideError, setCreateServersideError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newUser, setNewUser] = useState<typeof INITIAL_FORM_STATE>(INITIAL_FORM_STATE);
+
+  const [viewDialog, setViewDialog] = useState<ViewDialogState>({
+    open: false,
+    userId: null,
+    summary: null,
+    details: null,
+    isLoading: false,
+    error: null,
+  });
+
+  const [roleDialog, setRoleDialog] = useState<RoleDialogState>({
+    open: false,
+    userId: null,
+    user: null,
+    selectedRole: '',
+    isSubmitting: false,
+    error: null,
+  });
+
+  const [passwordDialog, setPasswordDialog] = useState<PasswordDialogState>({
+    open: false,
+    userId: null,
+    user: null,
+    newPassword: '',
+    isSubmitting: false,
+    error: null,
+  });
+
+  const [statusDialog, setStatusDialog] = useState<StatusDialogState>({
+    open: false,
+    userId: null,
+    user: null,
+    action: 'disable',
+    isSubmitting: false,
+    error: null,
+  });
 
   const canCreateUsers = currentUser?.permissions.canCreateUsers === true;
   const roleOptions = useMemo(
@@ -444,6 +571,368 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       setIsCreating(false);
     }
   };
+
+  const resetViewDialogState = () =>
+    setViewDialog({
+      open: false,
+      userId: null,
+      summary: null,
+      details: null,
+      isLoading: false,
+      error: null,
+    });
+
+  const resetRoleDialogState = () =>
+    setRoleDialog({
+      open: false,
+      userId: null,
+      user: null,
+      selectedRole: '',
+      isSubmitting: false,
+      error: null,
+    });
+
+  const resetPasswordDialogState = () =>
+    setPasswordDialog({
+      open: false,
+      userId: null,
+      user: null,
+      newPassword: '',
+      isSubmitting: false,
+      error: null,
+    });
+
+  const resetStatusDialogState = () =>
+    setStatusDialog({
+      open: false,
+      userId: null,
+      user: null,
+      action: 'disable',
+      isSubmitting: false,
+      error: null,
+    });
+
+  const handleOpenViewDialog = async (user: AdminUserDto) => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para consultar los detalles del usuario.');
+      return;
+    }
+
+    const identifier = resolveUserIdentifier(user);
+    if (!identifier) {
+      toast.error('No se pudo determinar el identificador del usuario seleccionado.');
+      return;
+    }
+
+    setViewDialog({
+      open: true,
+      userId: identifier,
+      summary: user,
+      details: null,
+      isLoading: true,
+      error: null,
+    });
+
+    try {
+      const details = await getUserById(authToken, identifier);
+      setViewDialog((prev) => ({
+        ...prev,
+        details,
+        isLoading: false,
+      }));
+    } catch (err) {
+      console.error('Error obteniendo detalle de usuario', err);
+      let message = 'No se pudo obtener la información del usuario.';
+
+      if (err instanceof ApiError && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      }
+
+      setViewDialog((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  };
+
+  const handleOpenRoleDialog = (user: AdminUserDto) => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para actualizar el rol del usuario.');
+      return;
+    }
+
+    const identifier = resolveUserIdentifier(user);
+    if (!identifier) {
+      toast.error('No se pudo determinar el identificador del usuario seleccionado.');
+      return;
+    }
+
+    if (roleOptions.length === 0 && !isLoadingReferences) {
+      void loadReferences();
+      toast('No hay roles disponibles. Solicitando catálogos...');
+    }
+
+    const record = user as Record<string, unknown>;
+    const candidateValues = [
+      record.roleId,
+      record.roleKey,
+      record.roleCode,
+      record.role,
+    ];
+
+    let initialRole = '';
+    for (const candidate of candidateValues) {
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        const normalized = candidate.trim();
+        const matchByValue = roleOptions.find((role) => role.value === normalized);
+        if (matchByValue) {
+          initialRole = matchByValue.value;
+          break;
+        }
+        const matchByLabel = roleOptions.find(
+          (role) => role.label.toLowerCase() === normalized.toLowerCase(),
+        );
+        if (matchByLabel) {
+          initialRole = matchByLabel.value;
+          break;
+        }
+      }
+    }
+
+    if (!initialRole && roleOptions.length > 0) {
+      initialRole = roleOptions[0].value;
+    }
+
+    setRoleDialog({
+      open: true,
+      userId: identifier,
+      user,
+      selectedRole: initialRole,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const handleSubmitRoleDialog = async () => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para actualizar el rol del usuario.');
+      return;
+    }
+
+    if (!roleDialog.userId) {
+      toast.error('No se pudo determinar el identificador del usuario.');
+      return;
+    }
+
+    if (!roleDialog.selectedRole) {
+      setRoleDialog((prev) => ({
+        ...prev,
+        error: 'Seleccione un rol válido.',
+      }));
+      return;
+    }
+
+    setRoleDialog((prev) => ({
+      ...prev,
+      isSubmitting: true,
+      error: null,
+    }));
+
+    try {
+      await updateUserRole(authToken, roleDialog.userId, { roleId: roleDialog.selectedRole });
+      toast.success('Rol actualizado correctamente.');
+      resetRoleDialogState();
+      await loadUsers();
+    } catch (err) {
+      console.error('Error actualizando rol de usuario', err);
+      let message = 'No se pudo actualizar el rol del usuario.';
+
+      if (err instanceof ApiError && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      }
+
+      setRoleDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  };
+
+  const handleOpenPasswordDialog = (user: AdminUserDto) => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para restablecer la contraseña.');
+      return;
+    }
+
+    const identifier = resolveUserIdentifier(user);
+    if (!identifier) {
+      toast.error('No se pudo determinar el identificador del usuario seleccionado.');
+      return;
+    }
+
+    setPasswordDialog({
+      open: true,
+      userId: identifier,
+      user,
+      newPassword: '',
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const handleSubmitPasswordDialog = async () => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para restablecer la contraseña.');
+      return;
+    }
+
+    if (!passwordDialog.userId) {
+      toast.error('No se pudo determinar el identificador del usuario.');
+      return;
+    }
+
+    if (!passwordDialog.newPassword || passwordDialog.newPassword.trim().length < 8) {
+      setPasswordDialog((prev) => ({
+        ...prev,
+        error: 'Ingrese una contraseña temporal con al menos 8 caracteres.',
+      }));
+      return;
+    }
+
+    setPasswordDialog((prev) => ({
+      ...prev,
+      isSubmitting: true,
+      error: null,
+    }));
+
+    try {
+      await resetUserPassword(authToken, passwordDialog.userId, passwordDialog.newPassword.trim());
+      toast.success('Contraseña restablecida correctamente.');
+      resetPasswordDialogState();
+    } catch (err) {
+      console.error('Error restableciendo contraseña', err);
+      let message = 'No se pudo restablecer la contraseña del usuario.';
+
+      if (err instanceof ApiError && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      }
+
+      setPasswordDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  };
+
+  const handleOpenStatusDialog = (user: AdminUserDto, action: StatusAction) => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para actualizar el estado del usuario.');
+      return;
+    }
+
+    const identifier = resolveUserIdentifier(user);
+    if (!identifier) {
+      toast.error('No se pudo determinar el identificador del usuario seleccionado.');
+      return;
+    }
+
+    setStatusDialog({
+      open: true,
+      userId: identifier,
+      user,
+      action,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const handleConfirmStatusDialog = async () => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para actualizar el estado del usuario.');
+      return;
+    }
+
+    if (!statusDialog.userId) {
+      toast.error('No se pudo determinar el identificador del usuario.');
+      return;
+    }
+
+    setStatusDialog((prev) => ({
+      ...prev,
+      isSubmitting: true,
+      error: null,
+    }));
+
+    try {
+      if (statusDialog.action === 'disable') {
+        await disableUser(authToken, statusDialog.userId);
+        toast.success('Usuario deshabilitado correctamente.');
+      } else {
+        await enableUser(authToken, statusDialog.userId);
+        toast.success('Usuario habilitado correctamente.');
+      }
+
+      resetStatusDialogState();
+      await loadUsers();
+    } catch (err) {
+      console.error('Error actualizando estado de usuario', err);
+      let message =
+        statusDialog.action === 'disable'
+          ? 'No se pudo deshabilitar al usuario.'
+          : 'No se pudo habilitar al usuario.';
+
+      if (err instanceof ApiError && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && typeof err.message === 'string' && err.message.trim()) {
+        message = err.message.trim();
+      }
+
+      setStatusDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  };
+
+  const viewDialogUser = viewDialog.details ?? viewDialog.summary;
+  const viewDialogStatusInfo = viewDialogUser
+    ? resolveStatusDescriptor(viewDialogUser.status)
+    : null;
+  const roleDialogUserName = roleDialog.user
+    ? resolveString(roleDialog.user, ['fullName', 'name'], '—')
+    : '—';
+  const roleDialogUserEmail = roleDialog.user
+    ? resolveString(roleDialog.user, ['email', 'userName', 'username'], '')
+    : '';
+  const passwordDialogUserName = passwordDialog.user
+    ? resolveString(passwordDialog.user, ['fullName', 'name'], '—')
+    : '—';
+  const passwordDialogUserEmail = passwordDialog.user
+    ? resolveString(passwordDialog.user, ['email', 'userName', 'username'], '')
+    : '';
+  const statusDialogTitle =
+    statusDialog.action === 'disable' ? 'Suspender usuario' : 'Reactivar usuario';
+  const statusDialogDescription =
+    statusDialog.action === 'disable'
+      ? 'El usuario perderá acceso inmediato al backoffice.'
+      : 'El usuario podrá acceder nuevamente al backoffice.';
+  const statusDialogUserName = statusDialog.user
+    ? resolveString(statusDialog.user, ['fullName', 'name', 'userName', 'username'], 'usuario seleccionado')
+    : 'usuario seleccionado';
 
   return (
     <div className="space-y-6">
@@ -733,18 +1222,19 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                   <TableHead className="hidden lg:table-cell">Provincia</TableHead>
                   <TableHead className="hidden xl:table-cell">Creado</TableHead>
                   <TableHead className="hidden xl:table-cell">Último acceso</TableHead>
+                  <TableHead className="text-center">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoadingUsers ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-gray-500">
+                    <TableCell colSpan={9} className="py-10 text-center text-gray-500">
                       Cargando usuarios...
                     </TableCell>
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-gray-500">
+                    <TableCell colSpan={9} className="py-10 text-center text-gray-500">
                       No hay usuarios registrados.
                     </TableCell>
                   </TableRow>
@@ -758,9 +1248,19 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                     const statusInfo = resolveStatusDescriptor(user.status);
                     const createdAt = resolveString(user, ['createdAt', 'createdDate'], '');
                     const lastLogin = resolveString(user, ['lastLoginAt', 'lastLogin'], '');
+                    const identifier = resolveUserIdentifier(user);
+                    const isActive = isActiveStatus(user.status);
+                    const statusAction: StatusAction = isActive ? 'disable' : 'enable';
+                    const StatusIcon = isActive ? Ban : CheckCircle2;
+                    const statusTooltip =
+                      statusAction === 'disable' ? 'Suspender usuario' : 'Reactivar usuario';
+                    const managementDisabled = !authToken || !canCreateUsers;
+                    const roleChangeDisabled = managementDisabled || roleOptions.length === 0;
+                    const passwordResetDisabled = managementDisabled;
+                    const statusChangeDisabled = managementDisabled;
 
                     return (
-                      <TableRow key={user.id ?? `${email}-${role}`}>
+                      <TableRow key={identifier ?? user.id ?? `${email}-${role}`}>
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-medium text-dr-dark-gray">{fullName}</span>
@@ -803,6 +1303,78 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                         <TableCell className="hidden xl:table-cell text-sm text-gray-600">
                           {formatDateTime(lastLogin)}
                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-center gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-9 w-9 p-0 text-dr-blue hover:bg-dr-blue/10"
+                                  onClick={() => handleOpenViewDialog(user)}
+                                  aria-label="Ver detalles"
+                                  disabled={!authToken}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Ver detalles</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-9 w-9 p-0 text-amber-600 hover:bg-amber-50"
+                                  onClick={() => handleOpenRoleDialog(user)}
+                                  aria-label="Actualizar rol"
+                                  disabled={roleChangeDisabled}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {roleChangeDisabled ? 'Permiso requerido' : 'Actualizar rol'}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-9 w-9 p-0 text-purple-600 hover:bg-purple-50"
+                                  onClick={() => handleOpenPasswordDialog(user)}
+                                  aria-label="Restablecer contraseña"
+                                  disabled={passwordResetDisabled}
+                                >
+                                  <Key className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {passwordResetDisabled
+                                  ? 'Permiso requerido'
+                                  : 'Restablecer contraseña'}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className={`h-9 w-9 p-0 ${statusAction === 'disable' ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}
+                                  onClick={() => handleOpenStatusDialog(user, statusAction)}
+                                  aria-label={statusTooltip}
+                                  disabled={statusChangeDisabled}
+                                >
+                                  <StatusIcon className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {statusChangeDisabled ? 'Permiso requerido' : statusTooltip}
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })
@@ -833,6 +1405,308 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
           </Alert>
         </>
       )}
+
+      <Dialog
+        open={viewDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetViewDialogState();
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Detalle del usuario</DialogTitle>
+            <DialogDescription>
+              Consulta la información completa del usuario seleccionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewDialog.isLoading && (
+            <div className="flex flex-col items-center justify-center gap-3 py-6">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-dr-blue/30 border-t-dr-blue" />
+              <p className="text-sm text-gray-500">Cargando información...</p>
+            </div>
+          )}
+
+          {!viewDialog.isLoading && viewDialogUser && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase text-gray-500">Nombre</p>
+                <p className="text-sm font-medium text-dr-dark-gray">
+                  {resolveString(viewDialogUser, ['fullName', 'name'], '—')}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Usuario</p>
+                <p className="text-sm text-gray-700">
+                  {resolveString(viewDialogUser, ['userName', 'username'], '—')}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Correo</p>
+                <p className="text-sm text-gray-700">
+                  {resolveString(viewDialogUser, ['email'], '—')}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Rol</p>
+                <p className="text-sm text-gray-700">
+                  {resolveString(viewDialogUser, ['role', 'roleName'], '—')}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Departamento</p>
+                <p className="text-sm text-gray-700">
+                  {resolveString(viewDialogUser, ['departmentName', 'department'], '—')}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Provincia</p>
+                <p className="text-sm text-gray-700">
+                  {resolveString(viewDialogUser, ['provinceName', 'province'], '—')}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Estado</p>
+                <p className="text-sm text-gray-700">
+                  {viewDialogStatusInfo ? (
+                    <Badge className={viewDialogStatusInfo.className}>
+                      {viewDialogStatusInfo.label}
+                    </Badge>
+                  ) : (
+                    '—'
+                  )}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Creado</p>
+                <p className="text-sm text-gray-700">
+                  {formatDateTime(resolveString(viewDialogUser, ['createdAt', 'createdDate'], ''))}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Último acceso</p>
+                <p className="text-sm text-gray-700">
+                  {formatDateTime(resolveString(viewDialogUser, ['lastLoginAt', 'lastLogin'], ''))}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!viewDialog.isLoading && !viewDialogUser && (
+            <p className="text-sm text-gray-500">No se encontraron datos para este usuario.</p>
+          )}
+
+          {viewDialog.error && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-700">{viewDialog.error}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetViewDialogState}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={roleDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetRoleDialogState();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Actualizar rol</DialogTitle>
+            <DialogDescription>
+              Seleccione el rol que debe tener el usuario en el sistema SIUBEN.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs uppercase text-gray-500">Usuario</p>
+              <p className="text-sm font-medium text-dr-dark-gray">{roleDialogUserName}</p>
+              {roleDialogUserEmail && (
+                <p className="text-xs text-gray-500">{roleDialogUserEmail}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="user-role-select">Rol asignado</Label>
+              <Select
+                value={roleDialog.selectedRole}
+                onValueChange={(value) =>
+                  setRoleDialog((prev) => ({
+                    ...prev,
+                    selectedRole: value,
+                    error: null,
+                  }))
+                }
+                disabled={roleOptions.length === 0}
+              >
+                <SelectTrigger id="user-role-select">
+                  <SelectValue placeholder="Seleccione un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((roleOption) => (
+                    <SelectItem key={roleOption.value} value={roleOption.value}>
+                      {roleOption.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {roleDialog.error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">{roleDialog.error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetRoleDialogState}
+              disabled={roleDialog.isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-dr-blue hover:bg-dr-blue-dark text-white"
+              onClick={handleSubmitRoleDialog}
+              disabled={roleDialog.isSubmitting || !roleDialog.selectedRole}
+            >
+              {roleDialog.isSubmitting ? 'Guardando...' : 'Actualizar rol'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={passwordDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetPasswordDialogState();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Restablecer contraseña</DialogTitle>
+            <DialogDescription>
+              Defina una nueva contraseña temporal que el usuario deberá cambiar al iniciar sesión.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs uppercase text-gray-500">Usuario</p>
+              <p className="text-sm font-medium text-dr-dark-gray">{passwordDialogUserName}</p>
+              {passwordDialogUserEmail && (
+                <p className="text-xs text-gray-500">{passwordDialogUserEmail}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="user-new-password">Nueva contraseña temporal</Label>
+              <Input
+                id="user-new-password"
+                type="password"
+                placeholder="Temporal#123"
+                value={passwordDialog.newPassword}
+                onChange={(event) =>
+                  setPasswordDialog((prev) => ({
+                    ...prev,
+                    newPassword: event.target.value,
+                    error: null,
+                  }))
+                }
+                disabled={passwordDialog.isSubmitting}
+              />
+              <p className="text-xs text-gray-500">
+                Debe contener al menos 8 caracteres y cumplir con las políticas de seguridad.
+              </p>
+            </div>
+            {passwordDialog.error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">
+                  {passwordDialog.error}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetPasswordDialogState}
+              disabled={passwordDialog.isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-dr-blue hover:bg-dr-blue-dark text-white"
+              onClick={handleSubmitPasswordDialog}
+              disabled={passwordDialog.isSubmitting}
+            >
+              {passwordDialog.isSubmitting ? 'Actualizando...' : 'Restablecer contraseña'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={statusDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetStatusDialogState();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{statusDialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {statusDialogDescription}
+              <br />
+              <span className="font-medium text-dr-dark-gray">{statusDialogUserName}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {statusDialog.error && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-700">{statusDialog.error}</AlertDescription>
+            </Alert>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={statusDialog.isSubmitting}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmStatusDialog}
+              disabled={statusDialog.isSubmitting}
+              className={
+                statusDialog.action === 'disable'
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }
+            >
+              {statusDialog.isSubmitting
+                ? 'Procesando...'
+                : statusDialog.action === 'disable'
+                  ? 'Suspender'
+                  : 'Reactivar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

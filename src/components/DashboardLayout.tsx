@@ -81,7 +81,11 @@ interface DashboardLayoutProps {
       canManageBeneficiaries: boolean;
     };
   };
-  onPasswordChange?: (username: string, newPassword: string) => Promise<boolean>;
+  onPasswordChange?: (payload: {
+    username: string;
+    currentPassword: string;
+    newPassword: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   onValidateCurrentPassword?: (username: string, currentPassword: string) => Promise<boolean>;
   authToken?: string | null;
 }
@@ -342,7 +346,7 @@ export function DashboardLayout({
     setShowNotifications((prev) => {
       const next = !prev;
       if (next) {
-        loadNotifications(false);
+        void loadNotifications(true);
       }
       return next;
     });
