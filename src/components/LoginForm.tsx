@@ -4,7 +4,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, CheckCircle2, Headset } from 'lucide-react';
 import governmentLogo from '../assets/Logo-Siuben.png';
 
 interface LoginFormProps {
@@ -12,6 +12,21 @@ interface LoginFormProps {
   error?: string;
   isLoading?: boolean;
 }
+
+const HERO_FEATURES = [
+  {
+    title: 'Panel centralizado',
+    description: 'Monitoree solicitudes, beneficiarios y reportes en un mismo lugar.',
+  },
+  {
+    title: 'Seguridad reforzada',
+    description: 'Autenticación cifrada y controles basados en el rol institucional.',
+  },
+  {
+    title: 'Gestión en tiempo real',
+    description: 'Actualizaciones instantáneas ante nuevas solicitudes o asignaciones.',
+  },
+];
 
 export function LoginForm({ onLogin, error, isLoading }: LoginFormProps) {
   const [email, setEmail] = useState('');
@@ -24,112 +39,130 @@ export function LoginForm({ onLogin, error, isLoading }: LoginFormProps) {
   };
 
   return (
-    <div className="min-h-screen bg-dr-light-gray flex flex-col md:flex-row">
-      {/* Brand / Hero */}
-      <div className="relative w-full md:w-1/2 xl:w-2/5 bg-gradient-to-br from-dr-blue via-dr-blue-dark to-dr-navy flex items-center justify-center px-6 py-10 md:py-16 overflow-hidden">
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top,white,transparent_60%)]" />
-        <div className="relative w-full max-w-md space-y-6 text-center md:text-left">
-          <div className="inline-flex items-center justify-center md:justify-start rounded-2xl bg-white/10 backdrop-blur px-5 py-3 border border-white/20 shadow-lg">
-            <img
-              src={governmentLogo}
-              alt="Gobierno de la República Dominicana - Sistema Único de Beneficiarios"
-              className="h-14 w-auto md:h-16 lg:h-18"
-            />
-          </div>
-          <div className="space-y-3 text-white">
-            <p className="text-sm uppercase tracking-[0.35em] text-white/80 font-gotham">
-              República Dominicana
-            </p>
-            <h1 className="text-3xl md:text-4xl font-gotham font-bold leading-tight">
-              Sistema Único de Beneficiarios
-            </h1>
-            <p className="text-white/90 text-base md:text-lg font-arial-rounded">
-              Acceso seguro al panel administrativo para la gestión nacional de beneficiarios.
-            </p>
-          </div>
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#eef2f7] via-white to-[#e4ecff]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_farthest-corner_at_12%_18%,rgba(18,94,201,0.18),transparent_52%)]" />
+      <div className="pointer-events-none absolute right-[-18%] top-[-8%] hidden h-[28rem] w-[28rem] rounded-full bg-dr-blue-dark/15 blur-[180px] md:block" />
+      <div className="pointer-events-none absolute left-[-30%] bottom-[-10%] h-[24rem] w-[24rem] rounded-full bg-dr-blue/12 blur-[160px]" />
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full flex-col items-center px-5 pb-12 pt-10 sm:px-8 md:px-10 lg:px-16">
+        <div className="w-full max-w-2xl space-y-3 text-center md:space-y-4">
+          <img
+            src={governmentLogo}
+            alt="Gobierno de la República Dominicana - Sistema Único de Beneficiarios"
+            className="mx-auto h-20 w-auto md:h-24"
+          />
+          <h1 className="text-[34px] font-gotham font-bold leading-tight text-dr-dark-gray md:text-[46px]">
+            Sistema Único de Beneficiarios
+          </h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.32em] text-dr-blue/80 md:text-base">
+            Backoffice SIUBEN
+          </p>
+          <p className="text-sm text-gray-600 md:text-base">
+            Ingrese con sus credenciales institucionales para administrar solicitudes, beneficiarios y reportes.
+          </p>
         </div>
-      </div>
 
-      {/* Login Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:px-8 md:px-10 md:py-16">
-        <Card className="w-full max-w-sm sm:max-w-md shadow-xl border border-gray-200/80">
-          <CardHeader className="text-center space-y-4 px-6 sm:px-8 pt-8">
-            <div className="mx-auto h-12 w-12 bg-dr-blue rounded-full flex items-center justify-center shadow-md">
-              <Lock className="h-6 w-6 text-white" />
-            </div>
-            <div className="space-y-2">
-              <CardTitle className="text-dr-dark-gray text-2xl sm:text-3xl">
-                Acceso al Sistema
-              </CardTitle>
-              <CardDescription className="text-gray-600 text-sm sm:text-base leading-relaxed">
-                Ingrese sus credenciales institucionales para acceder al panel administrativo.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="px-6 sm:px-8 pb-8">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <Alert className="border-amber-300 bg-amber-50 text-left">
-                  <AlertDescription className="text-amber-800 text-sm sm:text-base">
-                    {error}
-                  </AlertDescription>
-                </Alert>
-              )}
+        <div className="mt-10 flex w-full max-w-lg justify-center md:mt-12">
+          <Card className="w-full rounded-3xl border border-white/60 bg-white/95 shadow-[0_32px_80px_rgba(15,41,82,0.18)] backdrop-blur-sm">
+            <CardContent className="space-y-6 px-6 py-8 sm:px-8">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <Alert className="border-amber-300 bg-amber-50 text-left">
+                    <AlertDescription className="text-sm text-amber-800 sm:text-base">
+                      {error}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
-              <div className="space-y-2 text-left">
-                <Label htmlFor="email" className="text-dr-dark-gray font-medium">
-                  Correo electrónico
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="correo@siuben.gob.do"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 border-gray-300 focus:border-dr-blue focus:ring-dr-blue"
-                    required
-                  />
+                <div className="space-y-2 text-left">
+                  <Label htmlFor="email" className="text-sm font-medium text-dr-dark-gray">
+                    Correo institucional
+                  </Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="nombre.apellido@siuben.gob.do"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10 pr-3 text-sm sm:text-base"
+                      autoComplete="username"
+                      autoFocus
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2 text-left">
-                <Label htmlFor="password" className="text-dr-dark-gray font-medium">
-                  Contraseña
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Ingrese su contraseña"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 border-gray-300 focus:border-dr-blue focus:ring-dr-blue"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                <div className="space-y-2 text-left">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="password" className="text-sm font-medium text-dr-dark-gray">
+                      Contraseña
+                    </Label>
+                    <a
+                      href="mailto:mesadeservicio@siuben.gob.do?subject=Asistencia%20de%20acceso"
+                      className="text-xs font-semibold uppercase tracking-wide text-dr-blue transition-colors hover:text-dr-blue-dark"
+                    >
+                      ¿Necesita ayuda?
+                    </a>
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Ingrese su contraseña"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10 pr-10 text-sm sm:text-base"
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-dr-blue hover:bg-dr-blue-dark text-white font-medium py-2.5"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                <Button
+                  type="submit"
+                  className="w-full bg-dr-blue py-2.5 text-sm font-semibold tracking-wide text-white shadow-lg transition hover:bg-dr-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dr-blue focus-visible:ring-offset-2"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+                </Button>
+              </form>
+
+              <div className="flex flex-col gap-4 rounded-xl border border-dashed border-dr-blue/20 bg-dr-blue/5 p-4 text-left text-sm text-gray-600 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-dr-blue/10 text-dr-blue">
+                    <Headset className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="font-semibold text-dr-dark-gray">Mesa de ayuda SIUBEN</p>
+                    <p className="text-xs text-gray-500 sm:text-sm">
+                      soporte@siuben.gob.do • (809) 732-0230 ext. 234
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-dr-blue/40 text-dr-blue hover:bg-dr-blue/10"
+                  asChild
+                >
+                  <a href="mailto:soporte@siuben.gob.do?subject=Solicitud%20de%20apoyo">
+                    Contactar soporte
+                  </a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

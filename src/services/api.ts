@@ -350,7 +350,7 @@ export async function getUserById(token: string, userId: string): Promise<AdminU
   return apiFetch<AdminUserDto>(`/admin/users/${encodeURIComponent(userId)}`, { token });
 }
 
-export interface CreateUserPayload {
+export interface CreateUserPayload extends Record<string, unknown> {
   email: string;
   fullName: string;
   jobTitle?: string | null;
@@ -369,7 +369,7 @@ export async function createUser(token: string, payload: CreateUserPayload): Pro
   });
 }
 
-export interface UpdateUserPayload {
+export interface UpdateUserPayload extends Record<string, unknown> {
   fullName?: string;
   email?: string;
   jobTitle?: string | null;
@@ -391,7 +391,7 @@ export async function updateUser(
   });
 }
 
-export interface UpdateUserRolePayload {
+export interface UpdateUserRolePayload extends Record<string, unknown> {
   roleId: string;
 }
 
@@ -433,7 +433,7 @@ export async function disableUser(token: string, userId: string): Promise<void> 
   });
 }
 
-export interface UpdateOwnPasswordPayload {
+export interface UpdateOwnPasswordPayload extends Record<string, unknown> {
   currentPassword: string;
   newPassword: string;
 }
@@ -656,7 +656,7 @@ export async function searchBeneficiaries(
   return normalizePagedResult<BeneficiaryDto>(response);
 }
 
-export interface AssignBeneficiaryPayload {
+export interface AssignBeneficiaryPayload extends Record<string, unknown> {
   analystId: string;
   notes?: string;
 }
@@ -694,10 +694,13 @@ export interface NotificationDto extends Record<string, unknown> {
   id?: string;
   title?: string;
   message?: string;
+  metadataJson?: string | null;
+  relatedRequestId?: string | null;
   content?: string;
   body?: string;
   createdAt?: string;
   timestamp?: string;
+  readAt?: string | null;
   isRead?: boolean;
   read?: boolean;
   status?: string;
@@ -711,24 +714,46 @@ export interface ListNotificationsOptions {
   skip?: number;
 }
 
+export interface UnreadNotificationsCountResponse {
+  count?: number;
+}
+
 export async function getNotifications(
   token: string,
   options: ListNotificationsOptions = {},
 ): Promise<NotificationDto[]> {
+  const { includeRead = false, take = 50, skip } = options;
   const query = new URLSearchParams();
-  if (options.includeRead !== undefined) {
-    query.set('includeRead', String(options.includeRead));
+  if (includeRead !== undefined) {
+    query.set('includeRead', String(includeRead));
   }
-  if (options.take !== undefined) {
-    query.set('take', String(options.take));
+  if (take !== undefined) {
+    query.set('take', String(take));
   }
-  if (options.skip !== undefined) {
-    query.set('skip', String(options.skip));
+  if (skip !== undefined) {
+    query.set('skip', String(skip));
   }
 
   const path = query.toString() ? `/notifications?${query}` : '/notifications';
   const response = await apiFetch<unknown>(path, { token });
   return normalizeCollection<NotificationDto>(response);
+}
+
+export async function getUnreadNotificationsCount(token: string): Promise<number> {
+  const response = await apiFetch<number | UnreadNotificationsCountResponse>(
+    '/notifications/unread-count',
+    { token },
+  );
+
+  if (typeof response === 'number') {
+    return Number.isFinite(response) ? response : 0;
+  }
+
+  if (response && typeof response.count === 'number') {
+    return Number.isFinite(response.count) ? response.count : 0;
+  }
+
+  return 0;
 }
 
 export async function markNotificationRead(token: string, notificationId: string): Promise<void> {
@@ -796,7 +821,7 @@ export async function getRequests(
   return normalizeCollection<RequestDto>(response);
 }
 
-export interface AssignRequestPayload {
+export interface AssignRequestPayload extends Record<string, unknown> {
   analystId: string;
   notes?: string;
 }
@@ -807,6 +832,63 @@ export async function assignRequest(
   payload: AssignRequestPayload,
 ): Promise<RequestDto | null> {
   return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/assign`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+export interface AssignableUserDto extends Record<string, unknown> {
+  id?: string;
+  fullName?: string;
+  email?: string;
+  role?: string;
+  roleCode?: string;
+  departmentId?: string;
+  departmentName?: string;
+  isSameDepartment?: boolean;
+}
+
+export interface GetAssignableUsersOptions {
+  role?: string;
+  includeRelatedRoles?: boolean;
+  departmentId?: string;
+  prioritizeDepartmentId?: string;
+}
+
+export async function getAssignableUsers(
+  token: string,
+  options: GetAssignableUsersOptions = {}
+): Promise<AssignableUserDto[]> {
+  const params = new URLSearchParams();
+  if (options.role) {
+    params.set('role', options.role);
+  }
+  if (typeof options.includeRelatedRoles === 'boolean') {
+    params.set('includeRelatedRoles', String(options.includeRelatedRoles));
+  }
+  if (options.departmentId) {
+    params.set('departmentId', options.departmentId);
+  }
+  if (options.prioritizeDepartmentId) {
+    params.set('prioritizeDepartmentId', options.prioritizeDepartmentId);
+  }
+
+  const path = params.toString() ? `/requests/assignable-users?${params}` : '/requests/assignable-users';
+  const response = await apiFetch<unknown>(path, { token });
+  return normalizeCollection<AssignableUserDto>(response);
+}
+
+export interface UnassignRequestPayload extends Record<string, unknown> {
+  notes?: string;
+}
+
+export async function unassignRequest(
+  token: string,
+  requestId: string,
+  payload: UnassignRequestPayload = {}
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/unassign`, {
     method: 'POST',
     token,
     body: payload,

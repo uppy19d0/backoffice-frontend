@@ -35,6 +35,7 @@ interface CurrentUser {
 interface PageProps {
   currentUser?: CurrentUser | null;
   authToken?: string | null;
+  onNavigate?: (page: string) => void;
 }
 
 type AuditStatusKey = 'success' | 'failure' | 'unknown';

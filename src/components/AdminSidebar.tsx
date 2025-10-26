@@ -148,11 +148,7 @@ const SidebarItemComponent: React.FC<SidebarItemComponentProps> = ({
       >
         {/* Ícono */}
         <Icon 
-          className="sidebar-nav-icon"
-          style={{
-            width: `${tokens.iconSize}px`,
-            height: `${tokens.iconSize}px`,
-          }}
+          className="sidebar-nav-icon w-5 h-5"
         />
         
         {/* Label */}
@@ -170,10 +166,7 @@ const SidebarItemComponent: React.FC<SidebarItemComponentProps> = ({
             className="sidebar-nav-chevron"
           >
             <ChevronRight 
-              style={{
-                width: `${tokens.iconSize - 4}px`,
-                height: `${tokens.iconSize - 4}px`,
-              }}
+              className="w-4 h-4"
             />
           </motion.div>
         )}
@@ -211,10 +204,7 @@ const SidebarItemComponent: React.FC<SidebarItemComponentProps> = ({
                   }}
                 >
                   <SubIcon 
-                    style={{
-                      width: `${tokens.iconSize - 4}px`,
-                      height: `${tokens.iconSize - 4}px`,
-                    }}
+                    className="w-4 h-4"
                   />
                   <span className="sidebar-nav-label sidebar-nav-label--submenu">
                     {subItem.label}

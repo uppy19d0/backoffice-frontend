@@ -145,8 +145,18 @@ const getNavigationItems = (permissions?: {
     return items.filter(item => item.permission === null);
   }
 
-  return items.filter(item => {
-    if (!item.permission) return true;
+  return items.filter((item) => {
+    if (!item.permission) {
+      return true;
+    }
+
+    if (item.id === "beneficiaries") {
+      return (
+        permissions.canManageBeneficiaries ||
+        permissions.canReviewRequests
+      );
+    }
+
     return permissions[item.permission as keyof typeof permissions];
   });
 };
@@ -222,7 +232,7 @@ export function DashboardLayout({
     setShowNotifications((prev) => {
       const next = !prev;
       if (next) {
-        void refreshNotifications(true);
+        void refreshNotifications({ showErrors: true });
       }
       return next;
     });

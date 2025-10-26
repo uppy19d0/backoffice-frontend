@@ -696,7 +696,7 @@ function App() {
           <SystemConfigPage
             currentUser={currentUser}
             authToken={authToken}
-            onNavigate={setCurrentPage}
+            onNavigate={(page: string) => setCurrentPage(page)}
           />
         );
       default:

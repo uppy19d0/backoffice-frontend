@@ -7,6 +7,8 @@ interface CurrentUser {
   role: string;
   roleLevel: 'administrador' | 'manager' | 'analista';
   id?: string | null;
+  departmentName?: string | null;
+  departmentId?: string | null;
   permissions: {
     canCreateUsers: boolean;
     canApproveRequests: boolean;
@@ -25,6 +27,8 @@ interface PageProps {
 import { 
   getRequests, 
   assignRequest,
+  getAssignableUsers,
+  unassignRequest,
   getRequestCountReport, 
   getMonthlyRequestReport,
   getAnnualRequestReport,
@@ -43,7 +47,8 @@ import {
   downloadBlobAsFile,
   getNonAdminUsers,
   assignBeneficiaryToAnalyst,
-  RequestDto
+  RequestDto,
+  AssignableUserDto
 } from '../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -73,6 +78,7 @@ import {
   ClipboardList,
   Eye,
   UserPlus,
+  UserMinus,
   Calendar,
   MapPin,
   Mail,
@@ -96,7 +102,12 @@ import {
   Plus,
   RefreshCw,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  AlertTriangle,
+  Bell,
+  BellRing,
+  Check,
+  CheckCheck
 } from 'lucide-react';
 import { 
   ApiError,
@@ -1009,8 +1020,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showUnassignModal, setShowUnassignModal] = useState(false);
   const [selectedAnalyst, setSelectedAnalyst] = useState('');
   const [assignmentNotes, setAssignmentNotes] = useState('');
+  const [unassignNotes, setUnassignNotes] = useState('');
   const { pushNotification } = useNotifications();
   const previousRequestIdsRef = useRef<Set<string>>(new Set());
   const requestsInitializedRef = useRef(false);
@@ -1029,6 +1042,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     normalizedRoleString.includes('analista') ||
     currentUser?.roleLevel === 'analista';
   const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
+  const [usingFallbackAnalysts, setUsingFallbackAnalysts] = useState(true);
   const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
   const [isLoadingAnalysts, setIsLoadingAnalysts] = useState(false);
   const [assignDialogError, setAssignDialogError] = useState<string | null>(null);
@@ -1116,14 +1130,78 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     setAssignDialogError(null);
 
     try {
+      // Try to use the new assignable users endpoint first
+      try {
+        const assignableUsers = await getAssignableUsers(authToken, {
+          includeRelatedRoles: true,
+          ...(currentUser?.departmentId
+            ? {
+                departmentId: currentUser.departmentId,
+                prioritizeDepartmentId: currentUser.departmentId,
+              }
+            : {}),
+        });
+
+        if (assignableUsers.length > 0) {
+          const mapped = assignableUsers
+            .map((user): AnalystOption | null => {
+              const rawId =
+                typeof user.id === 'number'
+                  ? String(user.id)
+                  : typeof user.id === 'string'
+                    ? user.id
+                    : null;
+              const id = rawId?.trim();
+              if (!id) {
+                return null;
+              }
+
+              const baseName =
+                typeof user.fullName === 'string' && user.fullName.trim().length > 0
+                  ? user.fullName.trim()
+                  : null;
+              const fallbackName =
+                typeof user.email === 'string' && user.email.trim().length > 0
+                  ? user.email.trim()
+                  : id;
+
+              return {
+                id,
+                name: baseName ?? fallbackName,
+                email: user.email ?? null,
+                role: user.role ?? user.roleCode ?? null,
+                departmentName: user.departmentName ?? null,
+                isSameDepartment:
+                  typeof user.isSameDepartment === 'boolean' ? user.isSameDepartment : null,
+              };
+            })
+            .filter((option): option is AnalystOption => option !== null)
+            .sort((a, b) => {
+              const aSame = a.isSameDepartment ? 1 : 0;
+              const bSame = b.isSameDepartment ? 1 : 0;
+              return bSame - aSame;
+            });
+
+          setAnalysts(mapped);
+          setUsingFallbackAnalysts(false);
+          setHasLoadedAnalysts(true);
+          return;
+        }
+      } catch (assignableUsersError) {
+        console.log('Assignable users endpoint not available, falling back to getNonAdminUsers');
+      }
+
+      // Fallback to the original method
       const users = await getNonAdminUsers(authToken);
-      const mapped = mapAdminUsersToAnalystOptions(users);
+      const mapped = mapAdminUsersToAnalystOptions(users, currentUser);
 
       if (mapped.length === 0) {
         setAnalysts(FALLBACK_ANALYST_OPTIONS);
         setAssignDialogError('No se encontraron analistas disponibles en el sistema.');
+        setUsingFallbackAnalysts(true);
       } else {
         setAnalysts(mapped);
+        setUsingFallbackAnalysts(false);
       }
       setHasLoadedAnalysts(true);
     } catch (err) {
@@ -1138,11 +1216,12 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       if (!hasLoadedAnalysts) {
         setAnalysts(FALLBACK_ANALYST_OPTIONS);
       }
+      setUsingFallbackAnalysts(true);
       setHasLoadedAnalysts(true);
     } finally {
       setIsLoadingAnalysts(false);
     }
-  }, [authToken, hasLoadedAnalysts]);
+  }, [authToken, hasLoadedAnalysts, currentUser]);
 
   useEffect(() => {
     if ((isSupervisorRole || isAdminRole) && !hasLoadedAnalysts && authToken) {
@@ -1277,13 +1356,25 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   const filteredRequests = getFilteredRequests();
 
+  const { outOfTeamAnalystsCount, teamAnalystsCount } = useMemo(() => {
+    if (isAdminRole) {
+      return { outOfTeamAnalystsCount: 0, teamAnalystsCount: analysts.length };
+    }
+    const outCount = analysts.filter((analyst) => analyst.isSameDepartment === false).length;
+    return { outOfTeamAnalystsCount: outCount, teamAnalystsCount: analysts.length - outCount };
+  }, [analysts, isAdminRole]);
+
   const handleViewRequest = (request: RequestDto) => {
     setSelectedRequest(request);
     setShowViewModal(true);
   };
 
   const handleAssignRequest = (request: RequestDto) => {
-    setAssignDialogError(null);
+    setAssignDialogError(
+      usingFallbackAnalysts && hasLoadedAnalysts
+        ? 'El listado de analistas no está disponible. Solicite a un supervisor la asignación o espere a que se sincronice la información.'
+        : null,
+    );
     setSelectedRequest(request);
     setAssignmentNotes('');
     if (!hasLoadedAnalysts && !isLoadingAnalysts) {
@@ -1293,6 +1384,13 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   };
 
   const handleConfirmAssignment = async () => {
+    if (usingFallbackAnalysts) {
+      setAssignDialogError(
+        'No se puede asignar la solicitud porque el listado oficial de analistas no está disponible. Solicite apoyo a TI o a un supervisor con permisos de gestión.',
+      );
+      return;
+    }
+
     if (!authToken) {
       setAssignDialogError('Debe iniciar sesión para asignar una solicitud.');
       return;
@@ -1314,6 +1412,15 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     if (!analystInfo) {
       setAssignDialogError('Analista no encontrado entre las opciones disponibles.');
       toast.error('Analista no encontrado');
+      return;
+    }
+
+    const restrictToTeam = !isAdminRole && (isSupervisorRole || currentUser?.roleLevel === 'manager');
+    if (restrictToTeam && analystInfo.isSameDepartment === false) {
+      const message =
+        'Solo puedes asignar solicitudes a analistas que forman parte de tu equipo o departamento.';
+      setAssignDialogError(message);
+      toast.error(message);
       return;
     }
 
@@ -1407,6 +1514,40 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     }
   };
 
+  const handleUnassignRequest = async () => {
+    if (!selectedRequest || !authToken) return;
+    
+    setIsSubmittingAssignment(true);
+    try {
+      await unassignRequest(authToken, selectedRequest.id, {
+        notes: unassignNotes.trim() || undefined
+      });
+      
+      // Update local state
+      setRequests((prev: RequestDto[]) => prev.map((req: RequestDto) => 
+        req.id === selectedRequest.id 
+          ? { ...req, assignedTo: null, assignmentDate: null, assignmentNotes: null }
+          : req
+      ));
+      
+      toast.success(`Solicitud #${selectedRequest.id} desasignada exitosamente`);
+      setShowUnassignModal(false);
+      setUnassignNotes('');
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error('Error desasignando solicitud', error);
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : error instanceof Error && error.message
+            ? error.message
+            : 'No se pudo desasignar la solicitud. Intente nuevamente.';
+      toast.error(message);
+    } finally {
+      setIsSubmittingAssignment(false);
+    }
+  };
+
   const handleUpdateRequestStatus = (requestId: string, newStatus: string, notes?: string) => {
     setRequests(prev => prev.map(req => 
       req.id === requestId 
@@ -1461,6 +1602,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
           </Alert>
         )}
       </div>
+
+      {!(isSupervisorRole || isAdminRole) && (
+        <Alert className="border-gray-200 bg-gray-50">
+          <Info className="h-4 w-4 text-gray-600" />
+          <AlertDescription className="text-gray-700">
+            Los analistas pueden revisar y actualizar sus solicitudes asignadas, pero la asignación inicial
+            sólo la realizan supervisores o administradores. Si necesita reasignar un caso, comuníquelo a su supervisor.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Filters */}
       <Card>
@@ -1603,22 +1754,82 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                           <Eye className="h-4 w-4" />
                         </Button>
                         
-                        {/* Assignment button for managers on unassigned requests */}
+                        {/* Botón para ver beneficiario relacionado (solo para analistas con solicitudes asignadas) */}
+                        {(() => {
+                          const assigneeName = resolveRequestAssigneeName(request);
+                          const isAssignedToCurrentUser = isAnalystRole && assigneeName && currentUser && (
+                            assigneeName.toLowerCase().includes(currentUser.name?.toLowerCase() || '') ||
+                            assigneeName.toLowerCase().includes(currentUser.username?.toLowerCase() || '') ||
+                            assigneeName.toLowerCase().includes(currentUser.email?.toLowerCase() || '')
+                          );
+
+                          return isAssignedToCurrentUser && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                // Aquí se podría abrir un modal con información del beneficiario
+                                // o navegar a una vista específica del beneficiario
+                                toast.info('Funcionalidad de beneficiario disponible próximamente');
+                              }}
+                              className="text-purple-600 hover:bg-purple-50"
+                              title="Ver beneficiario relacionado"
+                            >
+                              <Users className="h-4 w-4" />
+                            </Button>
+                          );
+                        })()}
+                        
+                        {/* Assignment button for managers */}
                         {(() => {
                           const assigneeName = resolveRequestAssigneeName(request);
                           const isManager = isSupervisorRole || isAdminRole;
-                          const isPending = normalizeStatus(request.status) === 'pending';
                           const isUnassigned = !assigneeName;
+                          const canAssign = isManager && (
+                            normalizeStatus(request.status) === 'pending' || 
+                            normalizeStatus(request.status) === 'assigned' ||
+                            normalizeStatus(request.status) === 'review'
+                          );
 
-                          return isManager && isPending && isUnassigned && (
+                          return canAssign && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleAssignRequest(request)}
-                              className="text-green-600 hover:bg-green-50 font-medium"
-                              title="Asignar a analista"
+                              className={`font-medium ${
+                                isUnassigned 
+                                  ? 'text-green-600 hover:bg-green-50' 
+                                  : 'text-orange-600 hover:bg-orange-50'
+                              }`}
+                              title={isUnassigned ? "Asignar a analista" : "Reasignar analista"}
                             >
                               <UserPlus className="h-4 w-4" />
+                            </Button>
+                          );
+                        })()}
+
+                        {/* Unassign button for managers */}
+                        {(() => {
+                          const assigneeName = resolveRequestAssigneeName(request);
+                          const isManager = isSupervisorRole || isAdminRole;
+                          const isAssigned = !!assigneeName;
+                          const canUnassign = isManager && isAssigned && (
+                            normalizeStatus(request.status) === 'assigned' ||
+                            normalizeStatus(request.status) === 'review'
+                          );
+
+                          return canUnassign && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRequest(request);
+                                setShowUnassignModal(true);
+                              }}
+                              className="text-red-600 hover:bg-red-50"
+                              title="Desasignar analista"
+                            >
+                              <UserMinus className="h-4 w-4" />
                             </Button>
                           );
                         })()}
@@ -1675,12 +1886,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               <Select
                 value={selectedAnalyst}
                 onValueChange={setSelectedAnalyst}
-                disabled={isLoadingAnalysts || analysts.length === 0}
+                disabled={isLoadingAnalysts || analysts.length === 0 || usingFallbackAnalysts}
               >
                 <SelectTrigger id="analyst" className="w-full">
                   <SelectValue
                     placeholder={
-                      isLoadingAnalysts ? 'Cargando analistas...' : 'Seleccione un analista...'
+                      isLoadingAnalysts
+                        ? 'Cargando analistas...'
+                        : usingFallbackAnalysts
+                          ? 'Sin acceso a analistas disponibles'
+                          : 'Seleccione un analista...'
                     }
                   />
                 </SelectTrigger>
@@ -1689,17 +1904,51 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     <SelectItem value="__loading" disabled>
                       Cargando analistas...
                     </SelectItem>
+                  ) : usingFallbackAnalysts ? (
+                    <SelectItem value="__no-permission" disabled>
+                      Consulte a un supervisor para asignar solicitudes
+                    </SelectItem>
                   ) : analysts.length === 0 ? (
                     <SelectItem value="__none" disabled>
                       No hay analistas disponibles
                     </SelectItem>
                   ) : (
-                    analysts.map((analyst) => (
-                      <SelectItem key={analyst.id} value={analyst.id}>
-                        {analyst.name}
-                        {analyst.email ? ` · ${analyst.email}` : analyst.role ? ` · ${analyst.role}` : ''}
-                      </SelectItem>
-                    ))
+                    analysts.map((analyst) => {
+                      const isOutOfTeam = !isAdminRole && analyst.isSameDepartment === false;
+                      const metadata = [analyst.role, analyst.departmentName, analyst.email]
+                        .filter(
+                          (value): value is string =>
+                            typeof value === 'string' && value.trim().length > 0,
+                        )
+                        .map((value) => value.trim());
+                      return (
+                        <SelectItem key={analyst.id} value={analyst.id} disabled={isOutOfTeam}>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-dr-dark-gray">{analyst.name}</span>
+                              {analyst.isSameDepartment && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                  Mismo Depto.
+                                </Badge>
+                              )}
+                              {isOutOfTeam && (
+                                <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 border-gray-200">
+                                  Otro equipo
+                                </Badge>
+                              )}
+                            </div>
+                            {metadata.length > 0 && (
+                              <span className="text-xs text-gray-500">{metadata.join(' · ')}</span>
+                            )}
+                            {isOutOfTeam && (
+                              <span className="text-xs text-red-500">
+                                Solo puedes asignar solicitudes a analistas de tu equipo.
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })
                   )}
                 </SelectContent>
               </Select>
@@ -1708,7 +1957,17 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   ? assignDialogError
                   : isLoadingAnalysts
                     ? 'Cargando analistas disponibles...'
-                    : `${analysts.length} analista${analysts.length !== 1 ? 's' : ''} disponibles`}
+                    : usingFallbackAnalysts
+                      ? 'Necesita permisos de supervisor para asignar solicitudes.'
+                      : !isAdminRole && analysts.length > 0
+                        ? teamAnalystsCount > 0
+                          ? `${teamAnalystsCount} analista${teamAnalystsCount !== 1 ? 's' : ''} de tu equipo disponibles${
+                              outOfTeamAnalystsCount > 0
+                                ? ` · ${outOfTeamAnalystsCount} fuera de tu equipo`
+                                : ''
+                            }`
+                          : 'No hay analistas de tu equipo disponibles en este momento.'
+                        : `${analysts.length} analista${analysts.length !== 1 ? 's' : ''} disponibles`}
               </p>
             </div>
 
@@ -1718,7 +1977,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 id="notes"
                 placeholder="Agregue comentarios o instrucciones especiales para el analista..."
                 value={assignmentNotes}
-                onChange={(e) => setAssignmentNotes(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAssignmentNotes(e.target.value)}
                 rows={3}
                 className="resize-none"
               />
@@ -1742,10 +2001,74 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             </Button>
             <Button
               onClick={handleConfirmAssignment}
-              disabled={!selectedAnalyst || isSubmittingAssignment}
+              disabled={!selectedAnalyst || isSubmittingAssignment || usingFallbackAnalysts}
               className="bg-dr-blue hover:bg-dr-blue-dark"
             >
               {isSubmittingAssignment ? 'Asignando...' : 'Asignar Solicitud'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unassign Modal */}
+      <Dialog open={showUnassignModal} onOpenChange={setShowUnassignModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserMinus className="h-5 w-5 text-red-600" />
+              Desasignar Solicitud
+            </DialogTitle>
+            <DialogDescription>
+              ¿Está seguro de que desea desasignar la solicitud #{selectedRequest?.id}?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Request Info */}
+            {selectedRequest && (
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">Solicitante:</span>
+                    <span className="text-sm font-semibold text-dr-dark-gray">{selectedRequest.applicant}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">Asignado a:</span>
+                    <span className="text-sm font-semibold text-dr-blue">
+                      {resolveRequestAssigneeName(selectedRequest) || 'Sin asignar'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="unassign-notes">Comentarios (Opcional)</Label>
+              <Textarea
+                id="unassign-notes"
+                placeholder="Agregue comentarios sobre la razón de la desasignación..."
+                value={unassignNotes}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUnassignNotes(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowUnassignModal(false)}
+              disabled={isSubmittingAssignment}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleUnassignRequest}
+              disabled={isSubmittingAssignment}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isSubmittingAssignment ? 'Desasignando...' : 'Desasignar Solicitud'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2321,40 +2644,99 @@ const resolveAdminUserRole = (user: AdminUserDto): string | null => {
   return null;
 };
 
-const mapAdminUsersToAnalystOptions = (users: AdminUserDto[]): AnalystOption[] => {
-  const mapped = users
-    .map((user) => {
-      const role = resolveAdminUserRole(user);
-      const lowerRole = role ? role.toLowerCase() : '';
-      const isAnalystRole =
-        lowerRole.includes('analist') ||
-        lowerRole.includes('analista') ||
-        lowerRole.includes('analyst');
-      if (!isAnalystRole) {
-        return null;
+const resolveAdminUserDepartment = (user: AdminUserDto): string | null => {
+  const record = user as Record<string, unknown>;
+  const departmentKeys = [
+    'departmentName',
+    'department',
+    'area',
+    'areaName',
+    'region',
+    'office',
+    'officeName',
+    'unidad',
+  ];
+  for (const key of departmentKeys) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const mapAdminUsersToAnalystOptions = (
+  users: AdminUserDto[],
+  currentUser?: CurrentUser | null,
+): AnalystOption[] => {
+  const preferredTokens = ['analist', 'analista', 'analyst', 'gestor', 'coordinador', 'supervisor'];
+  const preferred: AnalystOption[] = [];
+  const secondary: AnalystOption[] = [];
+
+  const buildOption = (user: AdminUserDto): AnalystOption | null => {
+    const person = extractPersonInfo(user);
+    const identifier =
+      resolveAdminUserIdentifier(user) ?? person.id ?? person.email ?? person.name;
+    if (!identifier) {
+      return null;
+    }
+
+    const name = resolveAdminUserName(user) ?? person.name ?? identifier;
+    const email = person.email ?? undefined;
+    const role = resolveAdminUserRole(user) ?? undefined;
+    const departmentName = resolveAdminUserDepartment(user);
+
+    return {
+      id: identifier,
+      name,
+      email,
+      role,
+      departmentName,
+    };
+  };
+
+  for (const user of users) {
+    const option = buildOption(user);
+    if (!option) {
+      continue;
+    }
+
+    const normalizedRole = option.role ? option.role.toLowerCase() : '';
+    if (normalizedRole && preferredTokens.some((token) => normalizedRole.includes(token))) {
+      preferred.push(option);
+    } else {
+      secondary.push(option);
+    }
+  }
+
+  const normalizeDepartment = (value?: string | null): string | null =>
+    value && value.trim() ? value.trim().toLowerCase() : null;
+
+  const preferredDepartment = normalizeDepartment(currentUser?.departmentName);
+
+  const orderByDepartmentPreference = (options: AnalystOption[]): AnalystOption[] => {
+    if (!preferredDepartment) {
+      return options;
+    }
+    const matches: AnalystOption[] = [];
+    const rest: AnalystOption[] = [];
+    for (const option of options) {
+      if (normalizeDepartment(option.departmentName) === preferredDepartment) {
+        matches.push(option);
+      } else {
+        rest.push(option);
       }
+    }
+    return [...matches, ...rest];
+  };
 
-      const person = extractPersonInfo(user);
-      const identifier =
-        resolveAdminUserIdentifier(user) ?? person.id ?? person.email ?? person.name;
-      if (!identifier) {
-        return null;
-      }
-
-      const name = resolveAdminUserName(user) ?? person.name ?? identifier;
-      const email = person.email ?? undefined;
-
-      return {
-        id: identifier,
-        name,
-        email,
-        role,
-      } as AnalystOption;
-    })
-    .filter((value): value is AnalystOption => Boolean(value));
+  const ordered = [
+    ...orderByDepartmentPreference(preferred),
+    ...orderByDepartmentPreference(secondary),
+  ];
 
   const uniqueMap = new Map<string, AnalystOption>();
-  for (const analyst of mapped) {
+  for (const analyst of ordered) {
     if (!uniqueMap.has(analyst.id)) {
       uniqueMap.set(analyst.id, analyst);
     }
@@ -2436,6 +2818,8 @@ interface AnalystOption {
   name: string;
   email?: string | null;
   role?: string | null;
+  departmentName?: string | null;
+  isSameDepartment?: boolean;
 }
 
 const FALLBACK_ANALYST_OPTIONS: AnalystOption[] = availableAnalysts.map((analyst) => ({
@@ -2443,31 +2827,394 @@ const FALLBACK_ANALYST_OPTIONS: AnalystOption[] = availableAnalysts.map((analyst
   name: analyst.name,
   email: null,
   role: analyst.role,
+  departmentName: null,
 }));
 
-interface BeneficiaryAssignmentDialogState {
-  open: boolean;
-  beneficiary: BeneficiaryDto | null;
-  selectedAnalystId: string;
-  notes: string;
-  isSubmitting: boolean;
-  error: string | null;
-}
 
-const INITIAL_ASSIGN_DIALOG_STATE: BeneficiaryAssignmentDialogState = {
-  open: false,
-  beneficiary: null,
-  selectedAnalystId: '',
-  notes: '',
-  isSubmitting: false,
-  error: null,
-};
+// Notifications Page
+export function NotificationsPage({ currentUser, authToken }: PageProps) {
+  const { notifications, unreadCount, isLoading, error, refresh, markAsRead, markAllAsRead } = useNotifications();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+
+  // Filtrar notificaciones
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter(notification => {
+      // Filtro de búsqueda
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = 
+          notification.title.toLowerCase().includes(searchLower) ||
+          notification.message.toLowerCase().includes(searchLower) ||
+          notification.type.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+
+      // Filtro de tipo
+      if (typeFilter !== 'all' && notification.type !== typeFilter) {
+        return false;
+      }
+
+      // Filtro de prioridad
+      if (priorityFilter !== 'all' && notification.priority !== priorityFilter) {
+        return false;
+      }
+
+      // Filtro de estado
+      if (statusFilter === 'read' && !notification.read) return false;
+      if (statusFilter === 'unread' && notification.read) return false;
+
+      // Filtro de fecha
+      if (dateFilter !== 'all') {
+        const notificationDate = new Date(notification.createdAt);
+        const now = new Date();
+        const diffDays = Math.floor((now.getTime() - notificationDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        switch (dateFilter) {
+          case 'today':
+            if (diffDays > 0) return false;
+            break;
+          case 'week':
+            if (diffDays > 7) return false;
+            break;
+          case 'month':
+            if (diffDays > 30) return false;
+            break;
+        }
+      }
+
+      return true;
+    });
+  }, [notifications, searchTerm, typeFilter, priorityFilter, statusFilter, dateFilter]);
+
+  // Obtener tipos únicos de notificaciones
+  const notificationTypes = useMemo(() => {
+    const types = new Set(notifications.map(n => n.type));
+    return Array.from(types);
+  }, [notifications]);
+
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case 'high': return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case 'medium': return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+      case 'low': return <Info className="h-4 w-4 text-blue-500" />;
+      default: return <Info className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    const colors = {
+      high: 'bg-red-100 text-red-800 border-red-200',
+      medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      low: 'bg-blue-100 text-blue-800 border-blue-200'
+    };
+    return (
+      <Badge className={`${colors[priority as keyof typeof colors] || 'bg-gray-100 text-gray-800'} text-xs`}>
+        {priority === 'high' ? 'Alta' : priority === 'medium' ? 'Media' : 'Baja'}
+      </Badge>
+    );
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    
+    if (diffMinutes < 1) return 'Ahora';
+    if (diffMinutes < 60) return `Hace ${diffMinutes} min`;
+    
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `Hace ${diffHours}h`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `Hace ${diffDays}d`;
+    
+    return date.toLocaleDateString('es-DO', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-dr-dark-gray">Notificaciones</h1>
+          <p className="text-gray-600 mt-1">
+            Gestione todas sus notificaciones del sistema
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refresh({ showErrors: true })}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+          {unreadCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={markAllAsRead}
+            >
+              <CheckCheck className="h-4 w-4 mr-2" />
+              Marcar todas como leídas
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Estadísticas */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-50 p-2 rounded-full">
+                <Bell className="h-5 w-5 text-dr-blue" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Total</p>
+                <p className="text-xl font-bold text-dr-dark-gray">{notifications.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-red-50 p-2 rounded-full">
+                <BellRing className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Sin leer</p>
+                <p className="text-xl font-bold text-red-600">{unreadCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-50 p-2 rounded-full">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Leídas</p>
+                <p className="text-xl font-bold text-green-600">{notifications.length - unreadCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-yellow-50 p-2 rounded-full">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Alta prioridad</p>
+                <p className="text-xl font-bold text-yellow-600">
+                  {notifications.filter(n => n.priority === 'high').length}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filtros */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid gap-4 md:grid-cols-5">
+            <div className="space-y-2">
+              <Label htmlFor="search">Buscar</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="search"
+                  placeholder="Buscar notificaciones..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="type">Tipo</Label>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger id="type">
+                  <SelectValue placeholder="Todos los tipos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los tipos</SelectItem>
+                  {notificationTypes.map(type => (
+                    <SelectItem key={type} value={type}>
+                      {type === 'request' ? 'Solicitudes' : 
+                       type === 'system' ? 'Sistema' :
+                       type === 'request-assignment' ? 'Asignaciones' :
+                       type.charAt(0).toUpperCase() + type.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="priority">Prioridad</Label>
+              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                <SelectTrigger id="priority">
+                  <SelectValue placeholder="Todas las prioridades" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las prioridades</SelectItem>
+                  <SelectItem value="high">Alta</SelectItem>
+                  <SelectItem value="medium">Media</SelectItem>
+                  <SelectItem value="low">Baja</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Estado</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Todos los estados" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="unread">Sin leer</SelectItem>
+                  <SelectItem value="read">Leídas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date">Fecha</Label>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger id="date">
+                  <SelectValue placeholder="Todas las fechas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las fechas</SelectItem>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="week">Última semana</SelectItem>
+                  <SelectItem value="month">Último mes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de notificaciones */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Notificaciones ({filteredNotifications.length})</span>
+            {error && (
+              <Badge variant="destructive" className="text-xs">
+                Error al cargar
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-8 text-center text-gray-500">
+              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
+              Cargando notificaciones...
+            </div>
+          ) : filteredNotifications.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <Bell className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+              No se encontraron notificaciones con los filtros aplicados
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {filteredNotifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-4 hover:bg-gray-50 transition-colors ${
+                    !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-1">
+                      {getPriorityIcon(notification.priority)}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className={`text-sm font-medium ${
+                              !notification.read ? 'text-dr-dark-gray' : 'text-gray-700'
+                            }`}>
+                              {notification.title}
+                            </h3>
+                            {!notification.read && (
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">
+                            {notification.message}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{formatDate(notification.createdAt)}</span>
+                            <span>•</span>
+                            {getPriorityBadge(notification.priority)}
+                            <span>•</span>
+                            <Badge variant="outline" className="text-xs">
+                              {notification.type === 'request' ? 'Solicitud' : 
+                               notification.type === 'system' ? 'Sistema' :
+                               notification.type === 'request-assignment' ? 'Asignación' :
+                               notification.type}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          {!notification.read && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => markAsRead(notification.id)}
+                              className="text-blue-600 hover:bg-blue-50"
+                              title="Marcar como leída"
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 25;
+  const [pageSize, setPageSize] = useState(25);
 
   const [beneficiaries, setBeneficiaries] = useState<BeneficiaryDto[]>([]);
   const [pagination, setPagination] = useState({
@@ -2482,23 +3229,16 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   const [showViewModal, setShowViewModal] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
-  const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
-  const [isLoadingAnalysts, setIsLoadingAnalysts] = useState(false);
-  const [analystsError, setAnalystsError] = useState<string | null>(null);
-  const [assignDialog, setAssignDialog] = useState<BeneficiaryAssignmentDialogState>({
-    ...INITIAL_ASSIGN_DIALOG_STATE,
-  });
 
   const isAnalyst = currentUser?.roleLevel === 'analista';
   const isSupervisor = currentUser?.roleLevel === 'manager';
   const isAdmin = currentUser?.roleLevel === 'administrador';
-  const canAssignBeneficiaries =
+  // Los beneficiarios no se asignan directamente - solo los supervisores y admins pueden ver todos
+  const canViewAllBeneficiaries =
     Boolean(
       authToken &&
         currentUser &&
-        (currentUser.roleLevel === 'manager' || currentUser.roleLevel === 'administrador') &&
-        (currentUser.permissions?.canManageBeneficiaries ?? true),
+        (currentUser.roleLevel === 'manager' || currentUser.roleLevel === 'administrador'),
     );
 
   const analystTokens = useMemo(() => {
@@ -2525,6 +3265,10 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   useEffect(() => {
     setCurrentPage((previous) => (previous === 1 ? previous : 1));
   }, [debouncedSearch]);
+
+  useEffect(() => {
+    setCurrentPage((previous) => (previous === 1 ? previous : 1));
+  }, [pageSize]);
 
   const loadBeneficiaries = useCallback(
     async (page: number, term: string) => {
@@ -2566,6 +3310,8 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           }
         };
 
+        addOption({ ...baseOptions, includeAssignments: true });
+
         const analystIdentifier =
           trimOrUndefined(currentUser?.username) ??
           trimOrUndefined(currentUser?.email) ??
@@ -2575,18 +3321,21 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           trimOrUndefined(currentUser?.username) ??
           trimOrUndefined(currentUser?.name);
 
-        if (isAnalyst && analystIdentifier) {
-          addOption({
-            ...baseOptions,
-            assignedTo: analystIdentifier,
-            onlyAssigned: true,
-            includeAssignments: true,
+        // Los analistas NO ven beneficiarios directamente asignados
+        // Solo ven beneficiarios a través de solicitudes asignadas
+        if (isAnalyst) {
+          // Para analistas, no cargar beneficiarios directamente
+          // Los beneficiarios se mostrarán basados en las solicitudes asignadas
+          setBeneficiaries([]);
+          setPagination({
+            totalCount: 0,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPreviousPage: false,
           });
-          addOption({
-            ...baseOptions,
-            assignedTo: analystIdentifier,
-            onlyAssigned: true,
-          });
+          setCurrentPage(1);
+          setLastUpdated(new Date());
+          return;
         } else if ((isSupervisor || isAdmin) && supervisorIdentifier) {
           addOption({
             ...baseOptions,
@@ -2621,13 +3370,27 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
             result = await searchBeneficiaries(authToken, options);
             break;
           } catch (err) {
-            if (
-              err instanceof ApiError &&
-              (err.status === 401 || err.status === 403)
-            ) {
-              lastAuthorizationError = err;
+            if (err instanceof ApiError) {
+              if (err.status === 401 || err.status === 403) {
+                lastAuthorizationError = err;
+                continue;
+              }
+
+              if (err.status && [400, 404, 422].includes(err.status)) {
+                console.warn('Búsqueda de beneficiarios con filtros no compatibles, intentando siguiente opción.', {
+                  status: err.status,
+                  message: err.message,
+                  options,
+                });
+                continue;
+              }
+            }
+
+            if (err instanceof TypeError) {
+              console.warn('Fallo de red consultando beneficiarios, probando con la siguiente configuración.', err);
               continue;
             }
+
             throw err;
           }
         }
@@ -2696,49 +3459,15 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
     setShowViewModal(true);
   };
 
-  const filteredBeneficiaries = useMemo(() => {
-    if (!isAnalyst) {
-      return beneficiaries;
-    }
-    if (analystTokens.length === 0) {
+  const displayedBeneficiaries = useMemo(() => {
+    // Los analistas no ven beneficiarios directamente
+    if (!canViewAllBeneficiaries) {
       return [];
     }
-    return beneficiaries.filter((beneficiary) =>
-      matchAssignmentToTokens(extractBeneficiaryAssignmentInfo(beneficiary), analystTokens),
-    );
-  }, [beneficiaries, isAnalyst, analystTokens]);
+    return beneficiaries;
+  }, [beneficiaries, canViewAllBeneficiaries]);
 
-  useEffect(() => {
-    if (!isAnalyst) {
-      return;
-    }
-    const totalPages = Math.max(1, Math.ceil(filteredBeneficiaries.length / pageSize));
-    setCurrentPage((previous) => {
-      if (previous > totalPages) {
-        return totalPages;
-      }
-      if (previous < 1) {
-        return 1;
-      }
-      return previous;
-    });
-  }, [filteredBeneficiaries, isAnalyst, pageSize]);
-
-  const effectivePagination = useMemo(() => {
-    if (!isAnalyst) {
-      return pagination;
-    }
-    const filteredCount = filteredBeneficiaries.length;
-    const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
-    return {
-      totalCount: filteredCount,
-      totalPages,
-      hasNextPage: currentPage < totalPages,
-      hasPreviousPage: currentPage > 1,
-    };
-  }, [pagination, filteredBeneficiaries, isAnalyst, currentPage, pageSize]);
-
-  const displayedBeneficiaries = filteredBeneficiaries;
+  const effectivePagination = pagination;
   const totalCount = effectivePagination.totalCount;
   const withEmail = displayedBeneficiaries.filter(
     (beneficiary) => typeof beneficiary.email === 'string' && beneficiary.email.trim(),
@@ -2757,156 +3486,11 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
       })
     : '—';
 
-  const formatAssignmentDateTime = useCallback((value?: string | null): string | null => {
-    if (!value) {
-      return null;
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-    return date.toLocaleString('es-DO', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }, []);
 
-  const selectedAssignment = useMemo(
-    () =>
-      selectedBeneficiary ? extractBeneficiaryAssignmentInfo(selectedBeneficiary) : null,
-    [selectedBeneficiary],
-  );
 
-  const loadAnalysts = useCallback(async () => {
-    if (!authToken) {
-      return;
-    }
 
-    setIsLoadingAnalysts(true);
-    setAnalystsError(null);
 
-    try {
-      const users = await getNonAdminUsers(authToken);
-      const mapped = mapAdminUsersToAnalystOptions(users);
-
-      if (mapped.length === 0) {
-        setAnalysts(FALLBACK_ANALYST_OPTIONS);
-        setAnalystsError('No se encontraron analistas disponibles en el sistema.');
-      } else {
-        setAnalysts(mapped);
-      }
-      setHasLoadedAnalysts(true);
-    } catch (err) {
-      console.error('Error cargando analistas', err);
-      let message = 'No se pudieron cargar los analistas disponibles.';
-      if (err instanceof ApiError && err.message && err.message.trim()) {
-        message = err.message.trim();
-      } else if (err instanceof Error && err.message && err.message.trim()) {
-        message = err.message.trim();
-      }
-      setAnalystsError(message);
-      if (!hasLoadedAnalysts) {
-        setAnalysts(FALLBACK_ANALYST_OPTIONS);
-      }
-      setHasLoadedAnalysts(true);
-    } finally {
-      setIsLoadingAnalysts(false);
-    }
-  }, [authToken, hasLoadedAnalysts]);
-
-  useEffect(() => {
-    if (!canAssignBeneficiaries || hasLoadedAnalysts || !authToken) {
-      return;
-    }
-    void loadAnalysts();
-  }, [canAssignBeneficiaries, hasLoadedAnalysts, authToken, loadAnalysts]);
-
-  const handleOpenAssignDialog = (beneficiary: BeneficiaryDto) => {
-    if (!authToken) {
-      toast.warning('Debe iniciar sesión para asignar beneficiarios.');
-      return;
-    }
-    if (!canAssignBeneficiaries) {
-      toast.error('No tiene permisos para asignar beneficiarios.');
-      return;
-    }
-
-    const assignment = extractBeneficiaryAssignmentInfo(beneficiary);
-    setAssignDialog({
-      open: true,
-      beneficiary,
-      selectedAnalystId: assignment.analystId ?? '',
-      notes: assignment.notes ?? '',
-      isSubmitting: false,
-      error: null,
-    });
-
-    if (!hasLoadedAnalysts && !isLoadingAnalysts) {
-      void loadAnalysts();
-    }
-  };
-
-  const handleConfirmAssignment = async () => {
-    if (!authToken) {
-      setAssignDialog((prev) => ({
-        ...prev,
-        error: 'Debe iniciar sesión para asignar beneficiarios.',
-      }));
-      return;
-    }
-
-    if (!assignDialog.beneficiary) {
-      return;
-    }
-
-    if (!assignDialog.selectedAnalystId) {
-      setAssignDialog((prev) => ({
-        ...prev,
-        error: 'Seleccione un analista para continuar.',
-      }));
-      return;
-    }
-
-    const beneficiaryId = resolveBeneficiaryIdentifier(assignDialog.beneficiary);
-    if (!beneficiaryId) {
-      setAssignDialog((prev) => ({
-        ...prev,
-        error: 'No se pudo determinar el identificador del beneficiario seleccionado.',
-      }));
-      return;
-    }
-
-    setAssignDialog((prev) => ({ ...prev, isSubmitting: true, error: null }));
-
-    try {
-      await assignBeneficiaryToAnalyst(authToken, beneficiaryId, {
-        analystId: assignDialog.selectedAnalystId,
-        notes: assignDialog.notes.trim() ? assignDialog.notes.trim() : undefined,
-      });
-
-      toast.success('Beneficiario asignado correctamente.');
-      setAssignDialog({ ...INITIAL_ASSIGN_DIALOG_STATE });
-      void loadBeneficiaries(currentPage, debouncedSearch);
-    } catch (err) {
-      console.error('Error asignando beneficiario', err);
-      let message = 'No se pudo completar la asignación del beneficiario.';
-      if (err instanceof ApiError && err.message && err.message.trim()) {
-        message = err.message.trim();
-      } else if (err instanceof Error && err.message && err.message.trim()) {
-        message = err.message.trim();
-      }
-      setAssignDialog((prev) => ({
-        ...prev,
-        error: message,
-        isSubmitting: false,
-      }));
-    }
-  };
-
-  const columnCount = 8;
+  const columnCount = 6;
 
   const renderTableBody = () => {
     if (isLoading) {
@@ -2948,37 +3532,15 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
         typeof beneficiary.phoneNumber === 'string' && beneficiary.phoneNumber.trim().length > 0
           ? beneficiary.phoneNumber.trim()
           : '—';
-      const assignment = extractBeneficiaryAssignmentInfo(beneficiary);
-      const assignmentDateLabel = formatAssignmentDateTime(assignment.assignmentDate);
-      const isAssigned = Boolean(assignment.analystName);
 
       return (
         <TableRow key={`${idValue}-${nationalId}`}>
-          <TableCell className="text-sm text-dr-blue break-all">{idValue}</TableCell>
           <TableCell className="text-sm text-dr-dark-gray font-medium">
             {buildBeneficiaryName(beneficiary)}
           </TableCell>
           <TableCell className="text-sm text-gray-700">{nationalId}</TableCell>
           <TableCell className="text-sm text-gray-700">{email}</TableCell>
           <TableCell className="text-sm text-gray-700">{phone}</TableCell>
-          <TableCell className="text-sm text-gray-700">
-            {isAssigned ? (
-              <div className="flex flex-col">
-                <span className="font-medium text-dr-blue">{assignment.analystName}</span>
-                {assignment.analystEmail && (
-                  <span className="text-xs text-gray-500">{assignment.analystEmail}</span>
-                )}
-                {assignmentDateLabel && (
-                  <span className="text-xs text-gray-500">Asignado el {assignmentDateLabel}</span>
-                )}
-                {assignment.supervisorName && (
-                  <span className="text-xs text-gray-500">Por {assignment.supervisorName}</span>
-                )}
-              </div>
-            ) : (
-              <span className="text-sm text-gray-500">Sin asignar</span>
-            )}
-          </TableCell>
           <TableCell className="text-sm text-gray-700">
             {formatBeneficiaryDate(
               typeof beneficiary.createdAt === 'string' ? beneficiary.createdAt : undefined,
@@ -2994,16 +3556,6 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
               >
                 <Eye className="h-4 w-4" />
               </Button>
-              {canAssignBeneficiaries && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleOpenAssignDialog(beneficiary)}
-                  className="text-green-600 hover:bg-green-50"
-                >
-                  <UserPlus className="h-4 w-4" />
-                </Button>
-              )}
             </div>
           </TableCell>
         </TableRow>
@@ -3019,6 +3571,16 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           Consulte la información registrada de beneficiarios y acceda a los detalles de cada perfil.
         </p>
       </div>
+
+      {!canViewAllBeneficiaries && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <Shield className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            Como analista, puede ver los beneficiarios a través de las <strong>solicitudes asignadas</strong> en la sección de Solicitudes. 
+            Los supervisores y administradores pueden ver todos los beneficiarios directamente desde esta sección.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -3098,9 +3660,9 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
 
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center lg:flex-1">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Buscar por nombre, cédula o identificador..."
@@ -3108,6 +3670,31 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                   onChange={(event) => setSearchTerm(event.target.value)}
                   className="pl-10"
                 />
+              </div>
+              <div className="sm:w-[210px]">
+                <Label htmlFor="beneficiaries-page-size" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Registros por página
+                </Label>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(value) => {
+                    const parsed = Number.parseInt(value, 10);
+                    if (!Number.isNaN(parsed)) {
+                      setPageSize(parsed);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="beneficiaries-page-size" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size} por página
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <Button
@@ -3134,7 +3721,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
         <CardHeader>
           <CardTitle>Beneficiarios</CardTitle>
           <CardDescription>
-            Mostrando {displayedBeneficiaries.length} registro{displayedBeneficiaries.length === 1 ? '' : 's'} en la página {currentPage}.
+            Mostrando {displayedBeneficiaries.length} registro{displayedBeneficiaries.length === 1 ? '' : 's'} · Página {currentPage} · {pageSize} por página.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -3142,12 +3729,10 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[180px]">ID</TableHead>
                   <TableHead className="min-w-[200px]">Beneficiario</TableHead>
                   <TableHead className="min-w-[160px]">Cédula</TableHead>
                   <TableHead className="min-w-[200px]">Correo</TableHead>
                   <TableHead className="min-w-[160px]">Teléfono</TableHead>
-                  <TableHead className="min-w-[220px]">Asignado a</TableHead>
                   <TableHead className="min-w-[140px]">Registro</TableHead>
                   <TableHead className="min-w-[120px]">Acciones</TableHead>
                 </TableRow>
@@ -3158,7 +3743,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
         </CardContent>
         <div className="flex flex-col gap-3 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-600">
-            Total: {totalCount.toLocaleString('es-DO')} | Página {currentPage} de {effectivePagination.totalPages}
+            Total: {totalCount.toLocaleString('es-DO')} | Página {currentPage} de {effectivePagination.totalPages} | {pageSize} por página
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -3183,120 +3768,6 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
         </div>
       </Card>
 
-      <Dialog
-        open={assignDialog.open}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAssignDialog({ ...INITIAL_ASSIGN_DIALOG_STATE });
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-dr-blue" />
-              Asignar beneficiario
-            </DialogTitle>
-            <DialogDescription>
-              Seleccione el analista que dará seguimiento al beneficiario.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {assignDialog.beneficiary && (
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p className="text-sm font-semibold text-dr-dark-gray">
-                  {buildBeneficiaryName(assignDialog.beneficiary)}
-                </p>
-                <p className="text-xs text-gray-500">
-                  ID: {resolveBeneficiaryIdentifier(assignDialog.beneficiary) ?? '—'}
-                </p>
-                {assignDialog.beneficiary.nationalId && (
-                  <p className="text-xs text-gray-500">
-                    Cédula: {assignDialog.beneficiary.nationalId}
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="beneficiary-analyst">Seleccionar analista *</Label>
-              <Select
-                value={assignDialog.selectedAnalystId}
-                onValueChange={(value) =>
-                  setAssignDialog((prev) => ({
-                    ...prev,
-                    selectedAnalystId: value,
-                    error: null,
-                  }))
-                }
-                disabled={isLoadingAnalysts}
-              >
-                <SelectTrigger id="beneficiary-analyst" className="w-full">
-                  <SelectValue
-                    placeholder={
-                      isLoadingAnalysts ? 'Cargando analistas...' : 'Seleccione un analista'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {analysts.map((analyst) => (
-                    <SelectItem key={analyst.id} value={analyst.id}>
-                      {analyst.name}
-                      {analyst.email ? ` — ${analyst.email}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {analystsError && (
-                <p className="text-xs text-red-600">{analystsError}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="beneficiary-assignment-notes">Comentarios (opcional)</Label>
-              <Textarea
-                id="beneficiary-assignment-notes"
-                placeholder="Agregue instrucciones para el analista..."
-                rows={3}
-                value={assignDialog.notes}
-                onChange={(event) =>
-                  setAssignDialog((prev) => ({ ...prev, notes: event.target.value }))
-                }
-                disabled={assignDialog.isSubmitting}
-              />
-            </div>
-
-            {assignDialog.error && (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-700">
-                  {assignDialog.error}
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setAssignDialog({ ...INITIAL_ASSIGN_DIALOG_STATE })}
-              disabled={assignDialog.isSubmitting}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              className="bg-dr-blue hover:bg-dr-blue-dark text-white"
-              onClick={handleConfirmAssignment}
-              disabled={assignDialog.isSubmitting || !assignDialog.selectedAnalystId}
-            >
-              {assignDialog.isSubmitting ? 'Asignando...' : 'Asignar beneficiario'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
         <DialogContent className="max-w-3xl">
@@ -3376,27 +3847,6 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                   )}
                 </p>
               </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Analista asignado</p>
-                <p className="text-sm text-dr-dark-gray">
-                  {selectedAssignment?.analystName ?? 'Sin asignar'}
-                </p>
-                {selectedAssignment?.analystEmail && (
-                  <p className="text-xs text-gray-500">{selectedAssignment.analystEmail}</p>
-                )}
-                {selectedAssignment?.supervisorName && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Asignado por {selectedAssignment.supervisorName}
-                  </p>
-                )}
-                {selectedAssignment?.assignmentDate && (
-                  <p className="text-xs text-gray-500">
-                    Fecha de asignación:{' '}
-                    {formatAssignmentDateTime(selectedAssignment.assignmentDate) ??
-                      formatBeneficiaryDate(selectedAssignment.assignmentDate)}
-                  </p>
-                )}
-              </div>
               <div className="sm:col-span-2">
                 <p className="text-xs uppercase text-gray-500">Notas del beneficiario</p>
                 <p className="text-sm text-gray-700">
@@ -3405,12 +3855,6 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                     : 'Sin notas registradas.'}
                 </p>
               </div>
-              {selectedAssignment?.notes && (
-                <div className="sm:col-span-2">
-                  <p className="text-xs uppercase text-gray-500">Notas de asignación</p>
-                  <p className="text-sm text-gray-700">{selectedAssignment.notes}</p>
-                </div>
-              )}
             </div>
           ) : (
             <p className="text-sm text-gray-500">Seleccione un beneficiario para ver sus datos.</p>

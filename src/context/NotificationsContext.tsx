@@ -10,11 +10,24 @@ import {
   ApiError,
   NotificationDto,
   getNotifications,
+  getUnreadNotificationsCount,
   markNotificationRead,
 } from '../services/api';
 
 export type NotificationPriority = 'high' | 'medium' | 'low';
 export type NotificationTargetRole = 'Admin' | 'Supervisor' | 'Analyst' | 'All';
+
+export interface NotificationMetadata {
+  beneficiaryName?: string;
+  beneficiaryIdentifier?: string;
+  requestId?: string;
+  requestCode?: string;
+  requestType?: string;
+  requestTypeName?: string;
+  channel?: string;
+  raw?: Record<string, unknown> | null;
+  extras?: Record<string, unknown>;
+}
 
 export interface DashboardNotification {
   id: string;
@@ -22,10 +35,14 @@ export interface DashboardNotification {
   message: string;
   createdAt: string;
   read: boolean;
+  readAt?: string | null;
   priority: NotificationPriority;
   type: string;
   targetRoles: NotificationTargetRole[];
   source: 'remote' | 'local';
+  relatedRequestId?: string | null;
+  metadata?: NotificationMetadata | null;
+  metadataRaw?: Record<string, unknown> | null;
   raw?: NotificationDto;
 }
 
@@ -37,6 +54,9 @@ export interface NotificationInput {
   type?: string;
   targetRoles?: NotificationTargetRole[];
   createdAt?: string;
+  relatedRequestId?: string | null;
+  metadata?: NotificationMetadata | null;
+  read?: boolean;
 }
 
 interface NotificationsContextValue {
@@ -44,7 +64,7 @@ interface NotificationsContextValue {
   unreadCount: number;
   isLoading: boolean;
   error: string | null;
-  refresh: (showErrors?: boolean) => Promise<void>;
+  refresh: (options?: { showErrors?: boolean; silent?: boolean }) => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   pushNotification: (input: NotificationInput) => DashboardNotification;
@@ -67,6 +87,7 @@ const NORMALIZED_ROLE_MAP: Record<string, NotificationTargetRole> = {
   analista: 'Analyst',
 };
 
+const PRIORITY_ORDER: NotificationPriority[] = ['high', 'medium', 'low'];
 const ROLE_PRIORITY: NotificationTargetRole[] = ['Admin', 'Supervisor', 'Analyst'];
 
 const generateNotificationId = () => {
@@ -109,6 +130,196 @@ const mapStringToTargetRole = (value: string): NotificationTargetRole | null => 
   }
   const mapped = NORMALIZED_ROLE_MAP[normalized];
   return mapped ?? null;
+};
+
+const safeParseJsonToRecord = (value: unknown): Record<string, unknown> | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.toLowerCase() === 'null') {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+
+  return null;
+};
+
+const findStringInObject = (
+  source: unknown,
+  candidates: string[],
+  visited: WeakSet<object> = new WeakSet(),
+): string | undefined => {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+
+  if (visited.has(source as object)) {
+    return undefined;
+  }
+  visited.add(source as object);
+
+  const record = source as Record<string, unknown>;
+
+  for (const [key, rawValue] of Object.entries(record)) {
+    const keyLower = key.toLowerCase();
+    if (candidates.includes(keyLower)) {
+      const value = normalizeString(rawValue);
+      if (value) {
+        return value;
+      }
+    }
+
+    if (typeof rawValue === 'object' && rawValue !== null) {
+      const nested = findStringInObject(rawValue, candidates, visited);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const buildNotificationMetadata = (
+  notification: NotificationDto,
+): { metadata: NotificationMetadata | null; raw: Record<string, unknown> | null } => {
+  const raw =
+    safeParseJsonToRecord((notification as Record<string, unknown>).metadataJson) ??
+    safeParseJsonToRecord(notification.metadataJson) ??
+    safeParseJsonToRecord((notification as Record<string, unknown>).metadata);
+
+  if (!raw) {
+    return { metadata: null, raw: null };
+  }
+
+  const metadata: NotificationMetadata = {};
+
+  const beneficiaryName = findStringInObject(raw, [
+    'beneficiaryname',
+    'beneficiary',
+    'beneficiaryfullname',
+    'nombrebeneficiario',
+    'beneficiario',
+  ]);
+  if (beneficiaryName) {
+    metadata.beneficiaryName = beneficiaryName;
+  }
+
+  const beneficiaryIdentifier = findStringInObject(raw, [
+    'beneficiaryidentifier',
+    'beneficiaryid',
+    'beneficiarydocument',
+    'beneficiarycedula',
+    'cedulabeneficiario',
+    'documentoidentidad',
+    'documentid',
+  ]);
+  if (beneficiaryIdentifier) {
+    metadata.beneficiaryIdentifier = beneficiaryIdentifier;
+  }
+
+  const requestId = findStringInObject(raw, [
+    'requestid',
+    'solicitudid',
+    'beneficiaryrequestid',
+    'caseid',
+    'expedienteid',
+  ]);
+  if (requestId) {
+    metadata.requestId = requestId;
+  }
+
+  const requestCode = findStringInObject(raw, [
+    'requestcode',
+    'requestnumber',
+    'codigo',
+    'solicitudcodigo',
+    'expediente',
+    'casenumber',
+  ]);
+  if (requestCode && requestCode !== metadata.requestId) {
+    metadata.requestCode = requestCode;
+  }
+
+  const requestType = findStringInObject(raw, [
+    'requesttype',
+    'requesttypename',
+    'solicitudtipo',
+    'tiposolicitud',
+    'tipo',
+  ]);
+  if (requestType) {
+    metadata.requestType = requestType;
+  }
+
+  const requestTypeName = findStringInObject(raw, [
+    'requesttypedescription',
+    'requesttypedetail',
+    'requesttypename',
+    'descripcion',
+    'description',
+  ]);
+  if (requestTypeName && requestTypeName !== metadata.requestType) {
+    metadata.requestTypeName = requestTypeName;
+  }
+
+  const channel = findStringInObject(raw, ['channel', 'origin', 'source', 'via']);
+  if (channel) {
+    metadata.channel = channel;
+  }
+
+  const hasRelevantData = Object.keys(metadata).length > 0;
+
+  return {
+    metadata: hasRelevantData ? metadata : null,
+    raw,
+  };
+};
+
+const resolvePriorityFromType = (
+  type: string,
+  fallback: NotificationPriority,
+): NotificationPriority => {
+  const normalized = type.toLowerCase();
+  if (normalized === 'requestassigned' || normalized === 'request_assigned') {
+    return 'high';
+  }
+  if (normalized === 'requestunassigned' || normalized === 'request_unassigned') {
+    return 'medium';
+  }
+  if (normalized === 'general') {
+    return fallback;
+  }
+  return fallback;
+};
+
+const normalizeNotificationType = (value?: string): string => {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return 'general';
+  }
+  return normalized.trim().toLowerCase();
+};
+
+const getPriorityWeight = (priority: NotificationPriority): number => {
+  const index = PRIORITY_ORDER.indexOf(priority);
+  return index === -1 ? PRIORITY_ORDER.length : index;
 };
 
 const extractTargetRolesFromDto = (notification: NotificationDto): NotificationTargetRole[] => {
@@ -185,39 +396,60 @@ const mapNotificationDtoToDashboard = (
   notification: NotificationDto,
   index: number,
 ): DashboardNotification => {
+  const record = notification as Record<string, unknown>;
   const id =
     normalizeString(notification.id) ??
-    normalizeString((notification as Record<string, unknown>).notificationId) ??
-    normalizeString((notification as Record<string, unknown>).uuid) ??
+    normalizeString(record.notificationId) ??
+    normalizeString(record.uuid) ??
     `notification-${index}`;
 
   const title =
     normalizeString(notification.title) ??
-    normalizeString((notification as Record<string, unknown>).subject) ??
+    normalizeString(record.subject) ??
     'Notificación del sistema';
 
   const message =
     normalizeString(notification.message) ??
     normalizeString(notification.content) ??
     normalizeString(notification.body) ??
-    normalizeString((notification as Record<string, unknown>).description) ??
+    normalizeString(record.description) ??
     title;
 
   const createdAt =
     normalizeString(notification.createdAt) ??
     normalizeString(notification.timestamp) ??
-    normalizeString((notification as Record<string, unknown>).date) ??
+    normalizeString(record.date) ??
     new Date().toISOString();
+
+  const readAt =
+    normalizeString(notification.readAt) ??
+    normalizeString(record.readAt) ??
+    null;
 
   const read =
     Boolean(notification.isRead ?? notification.read) ||
+    Boolean(readAt) ||
     (typeof notification.status === 'string' &&
       notification.status.toLowerCase().includes('read'));
 
-  const type =
-    normalizeString(notification.type) ??
-    normalizeString((notification as Record<string, unknown>).category) ??
-    'system';
+  const type = normalizeNotificationType(
+    normalizeString(notification.type) ?? normalizeString(record.category) ?? normalizeString(record.notificationType),
+  );
+
+  const priority = resolvePriorityFromType(type, extractPriorityFromDto(notification));
+
+  const relatedRequestId =
+    normalizeString(notification.relatedRequestId) ??
+    normalizeString(record.relatedRequestId) ??
+    normalizeString(record.requestId) ??
+    null;
+
+  const { metadata, raw: metadataRaw } = buildNotificationMetadata(notification);
+
+  const finalRelatedRequestId =
+    relatedRequestId ??
+    (metadata?.requestId ? normalizeString(metadata.requestId) : null) ??
+    null;
 
   return {
     id,
@@ -225,10 +457,14 @@ const mapNotificationDtoToDashboard = (
     message,
     createdAt,
     read,
-    priority: extractPriorityFromDto(notification),
+    readAt,
+    priority,
     type,
     targetRoles: extractTargetRolesFromDto(notification),
     source: 'remote',
+    relatedRequestId: finalRelatedRequestId,
+    metadata,
+    metadataRaw,
     raw: notification,
   };
 };
@@ -237,7 +473,7 @@ const sortNotifications = (notifications: DashboardNotification[]) =>
   [...notifications].sort(
     (a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
-      ROLE_PRIORITY.indexOf(a.priority) - ROLE_PRIORITY.indexOf(b.priority),
+      PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority),
   );
 
 const normalizeRoleKey = (
@@ -287,7 +523,8 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({
   );
 
   const refresh = useCallback(
-    async (showError = false) => {
+    async (options: { showErrors?: boolean; silent?: boolean } = {}) => {
+      const showError = options.showErrors || false;
       if (!authToken) {
         setRemoteNotifications([]);
         setError(null);

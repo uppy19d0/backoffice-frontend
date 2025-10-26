@@ -41,7 +41,7 @@ import {
   Shield,
   UserPlus,
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import {
   AdminUserDto,
   ApiError,
@@ -79,6 +79,7 @@ interface CurrentUser {
 interface UsersManagementPageProps {
   currentUser?: CurrentUser | null;
   authToken: string | null;
+  onNavigate?: (page: string) => void;
 }
 
 interface ViewDialogState {
@@ -680,19 +681,20 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       if (err instanceof ApiError) {
         const details = err.details;
         if (details && typeof details === 'object') {
+          const detailsObj = details as Record<string, unknown>;
           if (
-            'error' in details &&
-            typeof (details as Record<string, unknown>).error === 'string' &&
-            (details as Record<string, unknown>).error.trim().length > 0
+            'error' in detailsObj &&
+            typeof detailsObj.error === 'string' &&
+            detailsObj.error.trim().length > 0
           ) {
-            const raw = ((details as Record<string, unknown>).error as string).trim();
+            const raw = (detailsObj.error as string).trim();
             message = normalizeMessage(raw);
           } else if (
-            'message' in details &&
-            typeof (details as Record<string, unknown>).message === 'string' &&
-            (details as Record<string, unknown>).message.trim().length > 0
+            'message' in detailsObj &&
+            typeof detailsObj.message === 'string' &&
+            detailsObj.message.trim().length > 0
           ) {
-            const raw = ((details as Record<string, unknown>).message as string).trim();
+            const raw = (detailsObj.message as string).trim();
             message = normalizeMessage(raw);
           }
         } else if (err.message.trim().length > 0) {
