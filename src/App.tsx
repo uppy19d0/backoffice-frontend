@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LoginForm } from './components/LoginForm';
 import { DashboardLayout } from './components/DashboardLayout';
+import { NotificationsProvider } from './context/NotificationsContext';
 import { TooltipProvider } from './components/ui/tooltip';
 import { Toaster } from './components/ui/sonner';
 import {
@@ -636,7 +637,13 @@ function App() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardOverview currentUser={currentUser} authToken={authToken} />;
+        return (
+          <DashboardOverview
+            currentUser={currentUser}
+            authToken={authToken}
+            onNavigate={setCurrentPage}
+          />
+        );
       case 'users':
         if (!currentUser?.permissions.canCreateUsers) {
           return (
@@ -657,47 +664,80 @@ function App() {
           <UsersManagementPage
             currentUser={currentUser}
             authToken={authToken}
+            onNavigate={setCurrentPage}
           />
         );
       case 'beneficiaries':
-        return <BeneficiariesPage currentUser={currentUser} authToken={authToken} />;
+        return (
+          <BeneficiariesPage
+            currentUser={currentUser}
+            authToken={authToken}
+            onNavigate={setCurrentPage}
+          />
+        );
       case 'requests':
-        return <RequestsPage currentUser={currentUser} authToken={authToken} />;
+        return (
+          <RequestsPage
+            currentUser={currentUser}
+            authToken={authToken}
+            onNavigate={setCurrentPage}
+          />
+        );
       case 'reports':
-        return <ReportsPage currentUser={currentUser} authToken={authToken} />;
+        return (
+          <ReportsPage
+            currentUser={currentUser}
+            authToken={authToken}
+            onNavigate={setCurrentPage}
+          />
+        );
       case 'config':
-        return <SystemConfigPage currentUser={currentUser} authToken={authToken} />;
+        return (
+          <SystemConfigPage
+            currentUser={currentUser}
+            authToken={authToken}
+            onNavigate={setCurrentPage}
+          />
+        );
       default:
-        return <DashboardOverview currentUser={currentUser} authToken={authToken} />;
+        return (
+          <DashboardOverview
+            currentUser={currentUser}
+            authToken={authToken}
+            onNavigate={setCurrentPage}
+          />
+        );
     }
   };
 
   return (
     <div className="dashboard-main-container">
       <TooltipProvider>
-        <DashboardLayout
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          onLogout={handleLogout}
-          userName={currentUser?.name}
-          userRole={currentUser?.role}
-          userPermissions={currentUser?.permissions}
-          currentUser={currentUser}
-          authToken={authToken}
-          onPasswordChange={handlePasswordChange}
-        >
-          {renderCurrentPage()}
-        </DashboardLayout>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: {
-              background: 'white',
-              color: 'var(--dr-dark-gray)',
-              border: '1px solid #DEE2E6',
-            },
-          }}
-        />
+        <NotificationsProvider currentUser={currentUser} authToken={authToken}>
+          <DashboardLayout
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onLogout={handleLogout}
+            userName={currentUser?.name}
+            userRole={currentUser?.role}
+            userPermissions={currentUser?.permissions}
+            currentUser={currentUser}
+            authToken={authToken}
+            onPasswordChange={handlePasswordChange}
+          >
+            {renderCurrentPage()}
+          </DashboardLayout>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: 'white',
+                color: 'var(--dr-dark-gray)',
+                border: '1px solid #DEE2E6',
+              },
+            }}
+          />
+        </NotificationsProvider>
       </TooltipProvider>
     </div>
   );

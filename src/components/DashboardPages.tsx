@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface CurrentUser {
   username: string;
+  email?: string | null;
   name: string;
   role: string;
   roleLevel: 'administrador' | 'manager' | 'analista';
+  id?: string | null;
   permissions: {
     canCreateUsers: boolean;
     canApproveRequests: boolean;
@@ -17,15 +19,31 @@ interface CurrentUser {
 interface PageProps {
   currentUser?: CurrentUser | null;
   authToken?: string | null;
+  onNavigate?: (page: string) => void;
 }
 
 import { 
   getRequests, 
+  assignRequest,
   getRequestCountReport, 
   getMonthlyRequestReport,
   getAnnualRequestReport,
   getActiveUsersReport,
-  getUsersByRoleReport
+  getUsersByRoleReport,
+  downloadRequestCountReportPDF,
+  downloadRequestCountReportExcel,
+  downloadMonthlyRequestReportPDF,
+  downloadMonthlyRequestReportExcel,
+  downloadAnnualRequestReportPDF,
+  downloadAnnualRequestReportExcel,
+  downloadActiveUsersReportPDF,
+  downloadActiveUsersReportExcel,
+  downloadUsersByRoleReportPDF,
+  downloadUsersByRoleReportExcel,
+  downloadBlobAsFile,
+  getNonAdminUsers,
+  assignBeneficiaryToAnalyst,
+  RequestDto
 } from '../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -76,9 +94,18 @@ import {
   Info,
   ArrowRight,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
-import { ApiError, BeneficiaryDto, searchBeneficiaries } from '../services/api';
+import { 
+  ApiError,
+  AdminUserDto,
+  BeneficiaryDto,
+  SearchBeneficiariesOptions,
+  searchBeneficiaries,
+} from '../services/api';
+import { useNotifications } from '../context/NotificationsContext';
 
 // Mock data for available analysts
 const availableAnalysts = [
@@ -206,9 +233,9 @@ const getPriorityBadge = (priority: string) => {
 };
 
 // Dashboard Overview Page
-export function DashboardOverview({ currentUser, authToken }: PageProps) {
+export function DashboardOverview({ currentUser, authToken, onNavigate }: PageProps) {
   const [showViewModal, setShowViewModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [selectedRequest, setSelectedRequest] = useState<RequestDto | null>(null);
   const [requestCountReport, setRequestCountReport] = useState<any>(null);
   const [activeUsersReport, setActiveUsersReport] = useState<any>(null);
   const [recentRequests, setRecentRequests] = useState<any[]>([]);
@@ -243,7 +270,7 @@ export function DashboardOverview({ currentUser, authToken }: PageProps) {
   useEffect(() => {
     const loadRequests = async () => {
       if (!authToken) return;
-      
+
       try {
         setIsLoadingRequests(true);
         const data = await getRequests(authToken, { take: 5 });
@@ -374,6 +401,7 @@ export function DashboardOverview({ currentUser, authToken }: PageProps) {
   };
 
   const stats = getStatsForRole();
+  const pendingAssignments = requestCountReport?.pendingRequests ?? 0;
 
   // Filtrar solicitudes según el rol del usuario
   const getFilteredRequests = () => {
@@ -397,7 +425,7 @@ export function DashboardOverview({ currentUser, authToken }: PageProps) {
   const filteredRecentRequests = getFilteredRequests();
 
   // Helper function to normalize status (same as in RequestsPage)
-  const normalizeStatus = (status: string | number): string => {
+  function normalizeStatus(status: string | number): string {
     const statusMap: Record<string, string> = {
       '0': 'pending',
       '1': 'assigned',
@@ -407,7 +435,7 @@ export function DashboardOverview({ currentUser, authToken }: PageProps) {
     };
     const statusStr = typeof status === 'number' ? String(status) : status;
     return statusMap[statusStr] || statusStr;
-  };
+  }
 
   // Solicitudes hardcodeadas (DEPRECATED - se eliminará)
   const getAllRequests_OLD = () => [
@@ -679,10 +707,15 @@ export function DashboardOverview({ currentUser, authToken }: PageProps) {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600">Solicitudes sin asignar</p>
-                    <p className="text-2xl font-bold text-dr-dark-gray">3</p>
+                    <p className="text-2xl font-bold text-dr-dark-gray">
+                      {formatNumber(pendingAssignments)}
+                    </p>
                   </div>
                 </div>
-                <Button className="bg-dr-blue hover:bg-dr-blue-dark">
+                <Button
+                  className="bg-dr-blue hover:bg-dr-blue-dark"
+                  onClick={() => onNavigate?.('requests')}
+                >
                   <UserPlus className="h-4 w-4 mr-2" />
                   Asignar Ahora
                 </Button>
@@ -966,7 +999,7 @@ export function DashboardOverview({ currentUser, authToken }: PageProps) {
 
 // Requests Management Page
 export function RequestsPage({ currentUser, authToken }: PageProps) {
-  const [requests, setRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<RequestDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -978,32 +1011,187 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedAnalyst, setSelectedAnalyst] = useState('');
   const [assignmentNotes, setAssignmentNotes] = useState('');
+  const { pushNotification } = useNotifications();
+  const previousRequestIdsRef = useRef<Set<string>>(new Set());
+  const requestsInitializedRef = useRef(false);
 
+  const roleString = currentUser?.role ?? '';
+  const normalizedRoleString = roleString.trim().toLowerCase();
+  const isSupervisorRole =
+    normalizedRoleString.includes('supervisor') ||
+    normalizedRoleString.includes('manager') ||
+    currentUser?.roleLevel === 'manager';
+  const isAdminRole =
+    normalizedRoleString.includes('admin') ||
+    normalizedRoleString.includes('administrador');
+  const isAnalystRole =
+    normalizedRoleString.includes('analyst') ||
+    normalizedRoleString.includes('analista') ||
+    currentUser?.roleLevel === 'analista';
+  const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
+  const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
+  const [isLoadingAnalysts, setIsLoadingAnalysts] = useState(false);
+  const [assignDialogError, setAssignDialogError] = useState<string | null>(null);
+  const [isSubmittingAssignment, setIsSubmittingAssignment] = useState(false);
+  const trackRequests = useCallback(
+    (data: RequestDto[], allowNotifications: boolean) => {
+      const currentIds = new Set<string>();
+      const newRequests: RequestDto[] = [];
+
+      data.forEach((request) => {
+        const id = resolveRequestId(request);
+        if (!id) {
+          return;
+        }
+        currentIds.add(id);
+        if (
+          requestsInitializedRef.current &&
+          allowNotifications &&
+          !previousRequestIdsRef.current.has(id)
+        ) {
+          newRequests.push(request);
+        }
+      });
+
+      previousRequestIdsRef.current = currentIds;
+      if (!requestsInitializedRef.current) {
+        requestsInitializedRef.current = true;
+      }
+
+      if (allowNotifications && newRequests.length > 0 && isSupervisorRole) {
+        newRequests.forEach((request) => {
+          const id = resolveRequestId(request);
+          if (!id) {
+            return;
+          }
+          pushNotification({
+            id: `request-${id}-new`,
+            title: 'Nueva solicitud recibida',
+            message:
+              request.applicant
+                ? `Se registró la solicitud #${id} de ${request.applicant}.`
+                : `Se registró la solicitud #${id}.`,
+            priority: 'medium',
+            type: 'request',
+            targetRoles: ['Supervisor'],
+          });
+        });
+      }
+    },
+    [isSupervisorRole, pushNotification],
+  );
   // Load requests from backend
+  const loadRequests = useCallback(async () => {
+    if (!authToken) {
+      setLoadError('No hay token de autenticación');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const data = await getRequests(authToken);
+      setRequests(data);
+      trackRequests(data, true);
+    } catch (error) {
+      console.error('Error cargando solicitudes:', error);
+      setLoadError(error instanceof Error ? error.message : 'Error cargando solicitudes');
+      toast.error('Error al cargar las solicitudes del sistema');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authToken, trackRequests]);
+
   useEffect(() => {
-    const loadRequests = async () => {
-      if (!authToken) {
-        setLoadError('No hay token de autenticación');
-        setIsLoading(false);
-        return;
+    void loadRequests();
+  }, [loadRequests]);
+
+  const loadAnalystOptions = useCallback(async () => {
+    if (!authToken) {
+      return;
+    }
+
+    setIsLoadingAnalysts(true);
+    setAssignDialogError(null);
+
+    try {
+      const users = await getNonAdminUsers(authToken);
+      const mapped = mapAdminUsersToAnalystOptions(users);
+
+      if (mapped.length === 0) {
+        setAnalysts(FALLBACK_ANALYST_OPTIONS);
+        setAssignDialogError('No se encontraron analistas disponibles en el sistema.');
+      } else {
+        setAnalysts(mapped);
+      }
+      setHasLoadedAnalysts(true);
+    } catch (err) {
+      console.error('Error cargando analistas', err);
+      let message = 'No se pudieron cargar los analistas disponibles.';
+      if (err instanceof ApiError && err.message && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && err.message && err.message.trim()) {
+        message = err.message.trim();
+      }
+      setAssignDialogError(message);
+      if (!hasLoadedAnalysts) {
+        setAnalysts(FALLBACK_ANALYST_OPTIONS);
+      }
+      setHasLoadedAnalysts(true);
+    } finally {
+      setIsLoadingAnalysts(false);
+    }
+  }, [authToken, hasLoadedAnalysts]);
+
+  useEffect(() => {
+    if ((isSupervisorRole || isAdminRole) && !hasLoadedAnalysts && authToken) {
+      void loadAnalystOptions();
+    }
+  }, [authToken, hasLoadedAnalysts, isAdminRole, isSupervisorRole, loadAnalystOptions]);
+
+  useEffect(() => {
+    if (!showAssignModal || !selectedRequest || analysts.length === 0) {
+      return;
+    }
+
+    setSelectedAnalyst((previous) => {
+      if (previous && analysts.some((analyst) => analyst.id === previous)) {
+        return previous;
       }
 
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-        const data = await getRequests(authToken);
-        setRequests(data);
-      } catch (error) {
-        console.error('Error cargando solicitudes:', error);
-        setLoadError(error instanceof Error ? error.message : 'Error cargando solicitudes');
-        toast.error('Error al cargar las solicitudes del sistema');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      const info = extractRequestAssigneeInfo(selectedRequest);
 
-    loadRequests();
-  }, [authToken]);
+      if (info.id) {
+        const matchById = analysts.find(
+          (analyst) => analyst.id.toLowerCase() === info.id!.toLowerCase(),
+        );
+        if (matchById) {
+          return matchById.id;
+        }
+      }
+
+      if (info.email) {
+        const matchByEmail = analysts.find(
+          (analyst) => analyst.email?.toLowerCase() === info.email!.toLowerCase(),
+        );
+        if (matchByEmail) {
+          return matchByEmail.id;
+        }
+      }
+
+      if (info.name) {
+        const matchByName = analysts.find(
+          (analyst) => analyst.name.toLowerCase() === info.name!.toLowerCase(),
+        );
+        if (matchByName) {
+          return matchByName.id;
+        }
+      }
+
+      return '';
+    });
+  }, [analysts, selectedRequest, showAssignModal]);
 
   // Helper function to normalize status (convert number to string)
   const normalizeStatus = (status: string | number): string => {
@@ -1023,10 +1211,36 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     let filteredRequests = requests;
 
     // Role-based filtering
-    if (currentUser?.roleLevel === 'analista') {
-      // Analysts only see their assigned requests
-      filteredRequests = requests.filter(req => req.assignedTo === currentUser.name);
-    } else if (currentUser?.roleLevel === 'manager') {
+    if (isAnalystRole && currentUser) {
+      const currentUserTokens = new Set<string>();
+      if (currentUser.name?.trim()) {
+        currentUserTokens.add(currentUser.name.trim().toLowerCase());
+      }
+      if (currentUser.username?.trim()) {
+        currentUserTokens.add(currentUser.username.trim().toLowerCase());
+      }
+      if (typeof currentUser.email === 'string' && currentUser.email.trim()) {
+        currentUserTokens.add(currentUser.email.trim().toLowerCase());
+      }
+      if (typeof currentUser.id === 'string' && currentUser.id.trim()) {
+        currentUserTokens.add(currentUser.id.trim().toLowerCase());
+      }
+
+      filteredRequests = requests.filter((req) => {
+        const info = extractRequestAssigneeInfo(req);
+        const candidateTokens: string[] = [];
+        if (info.name) {
+          candidateTokens.push(info.name.toLowerCase());
+        }
+        if (info.email) {
+          candidateTokens.push(info.email.toLowerCase());
+        }
+        if (info.id) {
+          candidateTokens.push(info.id.toLowerCase());
+        }
+        return candidateTokens.some((token) => currentUserTokens.has(token));
+      });
+    } else if (isSupervisorRole || isAdminRole) {
       // Managers see all requests (can assign to analysts)
       filteredRequests = requests;
     } else {
@@ -1036,11 +1250,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
     // Search filter
     if (searchTerm) {
-      filteredRequests = filteredRequests.filter(req =>
-        req.applicant?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        req.cedula?.includes(searchTerm) ||
-        req.id?.includes(searchTerm)
-      );
+      const normalizedSearch = searchTerm.toLowerCase();
+      filteredRequests = filteredRequests.filter((req) => {
+        const assigneeName = resolveRequestAssigneeName(req);
+        return (
+          req.applicant?.toLowerCase().includes(normalizedSearch) ||
+          req.cedula?.toLowerCase().includes(normalizedSearch) ||
+          req.id?.toLowerCase().includes(normalizedSearch) ||
+          (assigneeName ? assigneeName.toLowerCase().includes(normalizedSearch) : false)
+        );
+      });
     }
 
     // Status filter
@@ -1058,54 +1277,134 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   const filteredRequests = getFilteredRequests();
 
-  const handleViewRequest = (request: any) => {
+  const handleViewRequest = (request: RequestDto) => {
     setSelectedRequest(request);
     setShowViewModal(true);
   };
 
-  const handleAssignRequest = (request: any) => {
+  const handleAssignRequest = (request: RequestDto) => {
+    setAssignDialogError(null);
     setSelectedRequest(request);
+    setAssignmentNotes('');
+    if (!hasLoadedAnalysts && !isLoadingAnalysts) {
+      void loadAnalystOptions();
+    }
     setShowAssignModal(true);
   };
 
-  const handleConfirmAssignment = () => {
-    if (!selectedAnalyst || !selectedRequest) {
+  const handleConfirmAssignment = async () => {
+    if (!authToken) {
+      setAssignDialogError('Debe iniciar sesión para asignar una solicitud.');
+      return;
+    }
+
+    if (!selectedRequest || !selectedRequest.id) {
+      setAssignDialogError('No se pudo determinar la solicitud seleccionada.');
+      return;
+    }
+
+    if (!selectedAnalyst) {
+      setAssignDialogError('Seleccione un analista para continuar.');
       toast.error('Por favor seleccione un analista');
       return;
     }
 
-    const analystInfo = availableAnalysts.find(a => a.id === selectedAnalyst);
+    const analystInfo = analysts.find((analyst) => analyst.id === selectedAnalyst);
+
     if (!analystInfo) {
+      setAssignDialogError('Analista no encontrado entre las opciones disponibles.');
       toast.error('Analista no encontrado');
       return;
     }
 
-    // Update the request
-    setRequests(prev => prev.map(req => 
-      req.id === selectedRequest.id 
-        ? {
-            ...req,
-            status: 'assigned',
-            assignedTo: analystInfo.name,
-            assignmentDate: new Date().toLocaleDateString('es-DO'),
-            assignmentNotes: assignmentNotes
+    setIsSubmittingAssignment(true);
+    setAssignDialogError(null);
+
+    try {
+      const trimmedNotes = assignmentNotes.trim();
+      let updatedRequest: RequestDto | null = null;
+
+      try {
+        updatedRequest = await assignRequest(authToken, selectedRequest.id, {
+          analystId: analystInfo.id,
+          notes: trimmedNotes ? trimmedNotes : undefined,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          if (error.status === 401) {
+            throw new ApiError('La sesión expiró. Inicie sesión nuevamente.', error.status);
           }
-        : req
-    ));
-
-    toast.success(
-      `Solicitud asignada exitosamente`,
-      {
-        description: `${selectedRequest.applicant} → ${analystInfo.name}`,
-        duration: 4000
+          if (error.status === 403) {
+            throw new ApiError('No tiene permisos para asignar solicitudes.', error.status);
+          }
+          if (error.status === 404) {
+            throw new ApiError('La solicitud no se encontró en el servidor.', error.status);
+          }
+        }
+        throw error;
       }
-    );
 
-    // Reset state
-    setShowAssignModal(false);
-    setSelectedAnalyst('');
-    setAssignmentNotes('');
-    setSelectedRequest(null);
+      if (updatedRequest) {
+        setRequests((prev) =>
+          prev.map((req) => (req.id === updatedRequest?.id ? { ...req, ...updatedRequest } : req)),
+        );
+      } else {
+        setRequests((prev) =>
+          prev.map((req) =>
+            req.id === selectedRequest.id
+              ? {
+                  ...req,
+                  status: 'assigned',
+                  assignedTo: analystInfo.name,
+                  assignmentDate: new Date().toISOString(),
+                  assignmentNotes: trimmedNotes,
+                }
+              : req,
+          ),
+        );
+      }
+
+      await loadRequests();
+
+      const requestId = resolveRequestId(updatedRequest ?? selectedRequest) ?? String(selectedRequest.id ?? '');
+      const applicantName =
+        updatedRequest?.applicant ?? selectedRequest.applicant ?? undefined;
+
+      toast.success('Solicitud asignada correctamente', {
+        description: `${applicantName ?? `Solicitud #${requestId}`} → ${analystInfo.name}`,
+        duration: 4000,
+      });
+
+      if (isSupervisorRole || isAdminRole) {
+        pushNotification({
+          id: `request-${requestId}-assigned`,
+          title: 'Solicitud asignada',
+          message: applicantName
+            ? `La solicitud #${requestId} de ${applicantName} fue asignada a ${analystInfo.name}.`
+            : `La solicitud #${requestId} fue asignada a ${analystInfo.name}.`,
+          priority: 'medium',
+          type: 'request-assignment',
+          targetRoles: ['Supervisor'],
+        });
+      }
+
+      setShowAssignModal(false);
+      setSelectedAnalyst('');
+      setAssignmentNotes('');
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error('Error asignando solicitud', error);
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : error instanceof Error && error.message
+            ? error.message
+            : 'No se pudo asignar la solicitud. Intente nuevamente.';
+      setAssignDialogError(message);
+      toast.error(message);
+    } finally {
+      setIsSubmittingAssignment(false);
+    }
   };
 
   const handleUpdateRequestStatus = (requestId: string, newStatus: string, notes?: string) => {
@@ -1126,7 +1425,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   // Get count of unassigned requests for managers/admins
   const unassignedCount = (currentUser?.roleLevel === 'manager' || currentUser?.roleLevel === 'administrador') 
-    ? requests.filter(req => normalizeStatus(req.status) === 'pending' && !req.assignedTo).length 
+    ? requests.filter((req) => normalizeStatus(req.status) === 'pending' && !resolveRequestAssigneeName(req)).length 
     : 0;
 
   return (
@@ -1257,9 +1556,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     <TableHead className="hidden md:table-cell">Provincia</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="hidden lg:table-cell">Prioridad</TableHead>
-                    {(currentUser?.roleLevel === 'manager' || currentUser?.roleLevel === 'administrador') && (
-                      <TableHead className="hidden xl:table-cell">Asignado a</TableHead>
-                    )}
+                    <TableHead className="min-w-[200px]">Asignado a</TableHead>
                     <TableHead className="hidden lg:table-cell">Fecha</TableHead>
                     <TableHead>Acciones</TableHead>
                   </TableRow>
@@ -1283,15 +1580,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     <TableCell className="hidden md:table-cell">{request.province}</TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell className="hidden lg:table-cell">{getPriorityBadge(request.priority)}</TableCell>
-                    {(currentUser?.roleLevel === 'manager' || currentUser?.roleLevel === 'administrador') && (
-                      <TableCell className="hidden xl:table-cell">
-                        {request.assignedTo ? (
-                          <span className="text-sm text-dr-blue">{request.assignedTo}</span>
+                    <TableCell className="text-sm text-gray-700">
+                      {(() => {
+                        const assigneeName = resolveRequestAssigneeName(request);
+                        return assigneeName ? (
+                          <span className="text-dr-blue font-medium">{assigneeName}</span>
                         ) : (
-                          <span className="text-sm text-gray-500">Sin asignar</span>
-                        )}
-                      </TableCell>
-                    )}
+                          <span className="text-gray-500">Sin asignar</span>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell className="hidden lg:table-cell">{request.date}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -1307,20 +1605,11 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         
                         {/* Assignment button for managers on unassigned requests */}
                         {(() => {
-                          const isManager = currentUser?.roleLevel === 'manager' || currentUser?.roleLevel === 'administrador';
+                          const assigneeName = resolveRequestAssigneeName(request);
+                          const isManager = isSupervisorRole || isAdminRole;
                           const isPending = normalizeStatus(request.status) === 'pending';
-                          const isUnassigned = !request.assignedTo;
-                          
-                          // Debug log
-                          if (isManager && isPending) {
-                            console.log('Request:', request.id, {
-                              status: request.status,
-                              normalizedStatus: normalizeStatus(request.status),
-                              assignedTo: request.assignedTo,
-                              shouldShow: isManager && isPending && isUnassigned
-                            });
-                          }
-                          
+                          const isUnassigned = !assigneeName;
+
                           return isManager && isPending && isUnassigned && (
                             <Button
                               variant="ghost"
@@ -1383,20 +1672,43 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
             <div className="space-y-2">
               <Label htmlFor="analyst">Seleccionar Analista *</Label>
-              <Select value={selectedAnalyst} onValueChange={setSelectedAnalyst}>
+              <Select
+                value={selectedAnalyst}
+                onValueChange={setSelectedAnalyst}
+                disabled={isLoadingAnalysts || analysts.length === 0}
+              >
                 <SelectTrigger id="analyst" className="w-full">
-                  <SelectValue placeholder="Seleccione un analista..." />
+                  <SelectValue
+                    placeholder={
+                      isLoadingAnalysts ? 'Cargando analistas...' : 'Seleccione un analista...'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableAnalysts.map((analyst) => (
-                    <SelectItem key={analyst.id} value={analyst.id}>
-                      {analyst.name} - {analyst.role}
+                  {isLoadingAnalysts ? (
+                    <SelectItem value="__loading" disabled>
+                      Cargando analistas...
                     </SelectItem>
-                  ))}
+                  ) : analysts.length === 0 ? (
+                    <SelectItem value="__none" disabled>
+                      No hay analistas disponibles
+                    </SelectItem>
+                  ) : (
+                    analysts.map((analyst) => (
+                      <SelectItem key={analyst.id} value={analyst.id}>
+                        {analyst.name}
+                        {analyst.email ? ` · ${analyst.email}` : analyst.role ? ` · ${analyst.role}` : ''}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">
-                {availableAnalysts.length} analistas disponibles
+                {assignDialogError
+                  ? assignDialogError
+                  : isLoadingAnalysts
+                    ? 'Cargando analistas disponibles...'
+                    : `${analysts.length} analista${analysts.length !== 1 ? 's' : ''} disponibles`}
               </p>
             </div>
 
@@ -1413,16 +1725,27 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             </div>
           </div>
 
+          {assignDialogError && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-700">{assignDialogError}</AlertDescription>
+            </Alert>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAssignModal(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowAssignModal(false)}
+              disabled={isSubmittingAssignment}
+            >
               Cancelar
             </Button>
-            <Button 
+            <Button
               onClick={handleConfirmAssignment}
-              disabled={!selectedAnalyst}
+              disabled={!selectedAnalyst || isSubmittingAssignment}
               className="bg-dr-blue hover:bg-dr-blue-dark"
             >
-              Asignar Solicitud
+              {isSubmittingAssignment ? 'Asignando...' : 'Asignar Solicitud'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1665,7 +1988,482 @@ const buildBeneficiaryName = (beneficiary: BeneficiaryDto): string => {
   return full || 'Sin nombre registrado';
 };
 
-export function BeneficiariesPage({ authToken }: PageProps) {
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeStringCandidate = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return null;
+};
+
+const cleanLabelValue = (value: string): string =>
+  value.replace(/^(analista|asignado|assigned|usuario|user)\s*[:\-]\s*/i, '').trim();
+
+const PERSON_NAME_KEYS = ['fullName', 'name', 'displayName', 'username', 'userName'];
+const PERSON_EMAIL_KEYS = ['email', 'userEmail', 'mail', 'preferred_username'];
+const PERSON_ID_KEYS = ['id', 'userId', 'code', 'employeeId', 'accountId', 'userCode'];
+
+const ANALYST_STRING_KEYS = [
+  'assignedAnalystName',
+  'assignedAnalyst',
+  'analystName',
+  'assignedTo',
+  'assignedToName',
+  'assignedUser',
+  'assignedUserName',
+  'analyst',
+];
+const ANALYST_OBJECT_KEYS = [
+  'assignedAnalyst',
+  'assignedTo',
+  'analyst',
+  'assignedUser',
+  'assignee',
+  'currentAnalyst',
+  'assignmentAnalyst',
+];
+
+const SUPERVISOR_STRING_KEYS = [
+  'assignedByName',
+  'assignedBy',
+  'supervisorName',
+  'assignedSupervisorName',
+  'managerName',
+];
+const SUPERVISOR_OBJECT_KEYS = ['assignedBy', 'assignedSupervisor', 'supervisor', 'manager'];
+
+const ASSIGNMENT_DATE_KEYS = [
+  'assignmentDate',
+  'assignedAt',
+  'assignedDate',
+  'assignedOn',
+  'analystAssignedAt',
+];
+const ASSIGNMENT_NOTES_KEYS = ['assignmentNotes', 'assignedNotes', 'notes'];
+
+interface PersonInfo {
+  name: string | null;
+  email: string | null;
+  id: string | null;
+}
+
+interface BeneficiaryAssignmentInfo {
+  analystName: string | null;
+  analystEmail: string | null;
+  analystId: string | null;
+  supervisorName: string | null;
+  supervisorId: string | null;
+  assignmentDate: string | null;
+  notes: string | null;
+}
+
+const extractPersonInfo = (value: unknown): PersonInfo => {
+  const info: PersonInfo = { name: null, email: null, id: null };
+
+  if (value === null || value === undefined) {
+    return info;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const str = String(value).trim();
+    if (!str) {
+      return info;
+    }
+    if (str.includes('@')) {
+      info.email = str.toLowerCase();
+    }
+    if (!info.name) {
+      info.name = cleanLabelValue(str);
+    }
+    if (!info.id && /^[\w-]+$/.test(str) && str.length >= 6) {
+      info.id = str;
+    }
+    return info;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const nested = extractPersonInfo(entry);
+      if (!info.name && nested.name) info.name = nested.name;
+      if (!info.email && nested.email) info.email = nested.email;
+      if (!info.id && nested.id) info.id = nested.id;
+      if (info.name && info.email && info.id) {
+        break;
+      }
+    }
+    return info;
+  }
+
+  if (!isPlainObject(value)) {
+    return info;
+  }
+
+  const pickFromRecord = (record: Record<string, unknown>, keys: string[]): string | null => {
+    for (const key of keys) {
+      const candidate = normalizeStringCandidate(record[key]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return null;
+  };
+
+  const record = value;
+  const nameCandidate = pickFromRecord(record, PERSON_NAME_KEYS);
+  if (nameCandidate && !info.name) {
+    info.name = cleanLabelValue(nameCandidate);
+  }
+
+  const emailCandidate = pickFromRecord(record, PERSON_EMAIL_KEYS);
+  if (emailCandidate && !info.email) {
+    info.email = emailCandidate.toLowerCase();
+  }
+
+  const idCandidate = pickFromRecord(record, PERSON_ID_KEYS);
+  if (idCandidate && !info.id) {
+    info.id = idCandidate;
+  }
+
+  if (info.name && info.email && info.id) {
+    return info;
+  }
+
+  for (const nested of Object.values(record)) {
+    if (!isPlainObject(nested) && !Array.isArray(nested)) {
+      continue;
+    }
+    const nestedInfo = extractPersonInfo(nested);
+    if (!info.name && nestedInfo.name) info.name = nestedInfo.name;
+    if (!info.email && nestedInfo.email) info.email = nestedInfo.email;
+    if (!info.id && nestedInfo.id) info.id = nestedInfo.id;
+    if (info.name && info.email && info.id) {
+      break;
+    }
+  }
+
+  return info;
+};
+
+const extractBeneficiaryAssignmentInfo = (beneficiary: BeneficiaryDto): BeneficiaryAssignmentInfo => {
+  const record = beneficiary as Record<string, unknown>;
+  const info: BeneficiaryAssignmentInfo = {
+    analystName: null,
+    analystEmail: null,
+    analystId: null,
+    supervisorName: null,
+    supervisorId: null,
+    assignmentDate: null,
+    notes: null,
+  };
+
+  const assignAnalystFromValue = (value: unknown) => {
+    const person = extractPersonInfo(value);
+    if (person.name && !info.analystName) {
+      info.analystName = cleanLabelValue(person.name);
+    }
+    if (person.email && !info.analystEmail) {
+      info.analystEmail = person.email;
+    }
+    if (person.id && !info.analystId) {
+      info.analystId = person.id;
+    }
+  };
+
+  const assignSupervisorFromValue = (value: unknown) => {
+    const person = extractPersonInfo(value);
+    if (person.name && !info.supervisorName) {
+      info.supervisorName = cleanLabelValue(person.name);
+    }
+    if (person.id && !info.supervisorId) {
+      info.supervisorId = person.id;
+    }
+  };
+
+  for (const key of ANALYST_STRING_KEYS) {
+    if (info.analystName && info.analystEmail && info.analystId) {
+      break;
+    }
+    assignAnalystFromValue(record[key]);
+  }
+
+  for (const key of ANALYST_OBJECT_KEYS) {
+    if (info.analystName && info.analystEmail && info.analystId) {
+      break;
+    }
+    assignAnalystFromValue(record[key]);
+  }
+
+  assignAnalystFromValue(beneficiary.assignedAnalyst);
+  assignAnalystFromValue(beneficiary.assignedTo);
+  assignAnalystFromValue(beneficiary.assignedAnalystName);
+  assignAnalystFromValue(beneficiary.assignedAnalystEmail);
+  assignAnalystFromValue(beneficiary.assignedAnalystId);
+
+  for (const key of SUPERVISOR_STRING_KEYS) {
+    if (info.supervisorName && info.supervisorId) {
+      break;
+    }
+    assignSupervisorFromValue(record[key]);
+  }
+
+  for (const key of SUPERVISOR_OBJECT_KEYS) {
+    if (info.supervisorName && info.supervisorId) {
+      break;
+    }
+    assignSupervisorFromValue(record[key]);
+  }
+
+  assignSupervisorFromValue(beneficiary.assignedSupervisor);
+  assignSupervisorFromValue(beneficiary.assignedSupervisorName);
+  assignSupervisorFromValue(beneficiary.assignedSupervisorId);
+
+  if (record.assignment && isPlainObject(record.assignment)) {
+    const assignment = record.assignment as Record<string, unknown>;
+    assignAnalystFromValue(assignment.analyst);
+    assignSupervisorFromValue(assignment.supervisor);
+    assignSupervisorFromValue(assignment.assignedBy);
+  }
+
+  const assignmentDateCandidates = [
+    beneficiary.assignmentDate,
+    ...ASSIGNMENT_DATE_KEYS.map((key) => normalizeStringCandidate(record[key])),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  info.assignmentDate = assignmentDateCandidates[0] ?? null;
+
+  const notesCandidates = [
+    beneficiary.assignmentNotes,
+    ...ASSIGNMENT_NOTES_KEYS.map((key) => normalizeStringCandidate(record[key])),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  info.notes = notesCandidates[0] ?? null;
+
+  if (info.analystName) {
+    info.analystName = cleanLabelValue(info.analystName);
+  }
+  if (info.supervisorName) {
+    info.supervisorName = cleanLabelValue(info.supervisorName);
+  }
+
+  return info;
+};
+
+const matchAssignmentToTokens = (
+  assignment: BeneficiaryAssignmentInfo,
+  tokens: string[],
+): boolean => {
+  if (tokens.length === 0) {
+    return true;
+  }
+  const values = [assignment.analystName, assignment.analystEmail, assignment.analystId]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+  if (values.length === 0) {
+    return false;
+  }
+  return values.some((value) => tokens.some((token) => value.includes(token)));
+};
+
+const resolveAdminUserIdentifier = (user: AdminUserDto): string | null => {
+  const record = user as Record<string, unknown>;
+  const keys = ['id', 'userId', 'username', 'userName', 'email', 'code'];
+  for (const key of keys) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const resolveAdminUserName = (user: AdminUserDto): string | null => {
+  const record = user as Record<string, unknown>;
+  for (const key of PERSON_NAME_KEYS) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return resolveAdminUserIdentifier(user);
+};
+
+const resolveBeneficiaryIdentifier = (beneficiary: BeneficiaryDto): string | null => {
+  if (typeof beneficiary.id === 'string' && beneficiary.id.trim()) {
+    return beneficiary.id.trim();
+  }
+  if (typeof beneficiary.id === 'number') {
+    return String(beneficiary.id);
+  }
+  const record = beneficiary as Record<string, unknown>;
+  const keys = ['beneficiaryId', 'code', 'uuid', 'identifier', 'externalId'];
+  for (const key of keys) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const resolveAdminUserRole = (user: AdminUserDto): string | null => {
+  const record = user as Record<string, unknown>;
+  const keys = ['role', 'roleName', 'roleKey', 'roleDescription', 'position', 'jobTitle'];
+  for (const key of keys) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const mapAdminUsersToAnalystOptions = (users: AdminUserDto[]): AnalystOption[] => {
+  const mapped = users
+    .map((user) => {
+      const role = resolveAdminUserRole(user);
+      const lowerRole = role ? role.toLowerCase() : '';
+      const isAnalystRole =
+        lowerRole.includes('analist') ||
+        lowerRole.includes('analista') ||
+        lowerRole.includes('analyst');
+      if (!isAnalystRole) {
+        return null;
+      }
+
+      const person = extractPersonInfo(user);
+      const identifier =
+        resolveAdminUserIdentifier(user) ?? person.id ?? person.email ?? person.name;
+      if (!identifier) {
+        return null;
+      }
+
+      const name = resolveAdminUserName(user) ?? person.name ?? identifier;
+      const email = person.email ?? undefined;
+
+      return {
+        id: identifier,
+        name,
+        email,
+        role,
+      } as AnalystOption;
+    })
+    .filter((value): value is AnalystOption => Boolean(value));
+
+  const uniqueMap = new Map<string, AnalystOption>();
+  for (const analyst of mapped) {
+    if (!uniqueMap.has(analyst.id)) {
+      uniqueMap.set(analyst.id, analyst);
+    }
+  }
+
+  return Array.from(uniqueMap.values());
+};
+
+const REQUEST_ASSIGNEE_STRING_KEYS = [
+  'assignedTo',
+  'assignedToName',
+  'assignedToUserName',
+  'assignedAnalystName',
+  'assignedUserName',
+  'analystName',
+];
+
+const REQUEST_ASSIGNEE_OBJECT_KEYS = [
+  'assignedAnalyst',
+  'assignedUser',
+  'assignedToUser',
+  'analyst',
+];
+
+const extractRequestAssigneeInfo = (request: RequestDto): PersonInfo => {
+  const info: PersonInfo = { name: null, email: null, id: null };
+  const record = request as Record<string, unknown>;
+
+  for (const key of REQUEST_ASSIGNEE_STRING_KEYS) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate && !info.name) {
+      info.name = cleanLabelValue(candidate);
+    }
+  }
+
+  for (const key of REQUEST_ASSIGNEE_OBJECT_KEYS) {
+    const value = record[key];
+    if (!value) continue;
+    const person = extractPersonInfo(value);
+    if (person.name && !info.name) {
+      info.name = cleanLabelValue(person.name);
+    }
+    if (person.email && !info.email) {
+      info.email = person.email;
+    }
+    if (person.id && !info.id) {
+      info.id = person.id;
+    }
+  }
+
+  return info;
+};
+
+const resolveRequestAssigneeName = (request: RequestDto): string | null => {
+  const info = extractRequestAssigneeInfo(request);
+  return info.name;
+};
+
+const resolveRequestId = (request: RequestDto): string | null => {
+  if (typeof request.id === 'string' && request.id.trim()) {
+    return request.id.trim();
+  }
+  if (typeof request.id === 'number') {
+    return String(request.id);
+  }
+  const record = request as Record<string, unknown>;
+  const fallbackKeys = ['requestId', 'code', 'uuid'];
+  for (const key of fallbackKeys) {
+    const candidate = normalizeStringCandidate(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+interface AnalystOption {
+  id: string;
+  name: string;
+  email?: string | null;
+  role?: string | null;
+}
+
+const FALLBACK_ANALYST_OPTIONS: AnalystOption[] = availableAnalysts.map((analyst) => ({
+  id: analyst.id,
+  name: analyst.name,
+  email: null,
+  role: analyst.role,
+}));
+
+interface BeneficiaryAssignmentDialogState {
+  open: boolean;
+  beneficiary: BeneficiaryDto | null;
+  selectedAnalystId: string;
+  notes: string;
+  isSubmitting: boolean;
+  error: string | null;
+}
+
+const INITIAL_ASSIGN_DIALOG_STATE: BeneficiaryAssignmentDialogState = {
+  open: false,
+  beneficiary: null,
+  selectedAnalystId: '',
+  notes: '',
+  isSubmitting: false,
+  error: null,
+};
+
+export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1683,6 +2481,39 @@ export function BeneficiariesPage({ authToken }: PageProps) {
   const [selectedBeneficiary, setSelectedBeneficiary] = useState<BeneficiaryDto | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
+  const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
+  const [isLoadingAnalysts, setIsLoadingAnalysts] = useState(false);
+  const [analystsError, setAnalystsError] = useState<string | null>(null);
+  const [assignDialog, setAssignDialog] = useState<BeneficiaryAssignmentDialogState>({
+    ...INITIAL_ASSIGN_DIALOG_STATE,
+  });
+
+  const isAnalyst = currentUser?.roleLevel === 'analista';
+  const isSupervisor = currentUser?.roleLevel === 'manager';
+  const isAdmin = currentUser?.roleLevel === 'administrador';
+  const canAssignBeneficiaries =
+    Boolean(
+      authToken &&
+        currentUser &&
+        (currentUser.roleLevel === 'manager' || currentUser.roleLevel === 'administrador') &&
+        (currentUser.permissions?.canManageBeneficiaries ?? true),
+    );
+
+  const analystTokens = useMemo(() => {
+    if (!currentUser) {
+      return [];
+    }
+    const tokens = new Set<string>();
+    if (currentUser.username && currentUser.username.trim()) {
+      tokens.add(currentUser.username.trim().toLowerCase());
+    }
+    if (currentUser.name && currentUser.name.trim()) {
+      tokens.add(currentUser.name.trim().toLowerCase());
+    }
+    return Array.from(tokens);
+  }, [currentUser]);
 
   useEffect(() => {
     const handler = window.setTimeout(() => {
@@ -1713,11 +2544,100 @@ export function BeneficiariesPage({ authToken }: PageProps) {
       setError(null);
 
       try {
-        const result = await searchBeneficiaries(authToken, {
+        const trimOrUndefined = (value?: string | null): string | undefined =>
+          typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+
+        const baseOptions: SearchBeneficiariesOptions = {
           search: term || undefined,
           pageNumber: page,
           pageSize,
-        });
+        };
+
+        const optionsQueue: SearchBeneficiariesOptions[] = [];
+        const seenOptions = new Set<string>();
+        const addOption = (options: SearchBeneficiariesOptions) => {
+          const entries = Object.entries(options)
+            .filter(([, value]) => value !== undefined)
+            .sort(([a], [b]) => a.localeCompare(b));
+          const key = JSON.stringify(entries);
+          if (!seenOptions.has(key)) {
+            seenOptions.add(key);
+            optionsQueue.push(options);
+          }
+        };
+
+        const analystIdentifier =
+          trimOrUndefined(currentUser?.username) ??
+          trimOrUndefined(currentUser?.email) ??
+          trimOrUndefined(currentUser?.name);
+        const supervisorIdentifier =
+          trimOrUndefined(currentUser?.id) ??
+          trimOrUndefined(currentUser?.username) ??
+          trimOrUndefined(currentUser?.name);
+
+        if (isAnalyst && analystIdentifier) {
+          addOption({
+            ...baseOptions,
+            assignedTo: analystIdentifier,
+            onlyAssigned: true,
+            includeAssignments: true,
+          });
+          addOption({
+            ...baseOptions,
+            assignedTo: analystIdentifier,
+            onlyAssigned: true,
+          });
+        } else if ((isSupervisor || isAdmin) && supervisorIdentifier) {
+          addOption({
+            ...baseOptions,
+            includeAssignments: true,
+            supervisorId: supervisorIdentifier,
+          });
+          addOption({
+            ...baseOptions,
+            onlyAssigned: true,
+            supervisorId: supervisorIdentifier,
+          });
+          if (isAdmin) {
+            addOption({
+              ...baseOptions,
+              includeAssignments: true,
+            });
+          }
+        } else {
+          addOption({
+            ...baseOptions,
+            includeAssignments: true,
+          });
+        }
+
+        addOption(baseOptions);
+
+        let result: Awaited<ReturnType<typeof searchBeneficiaries>> | null = null;
+        let lastAuthorizationError: ApiError | null = null;
+
+        for (const options of optionsQueue) {
+          try {
+            result = await searchBeneficiaries(authToken, options);
+            break;
+          } catch (err) {
+            if (
+              err instanceof ApiError &&
+              (err.status === 401 || err.status === 403)
+            ) {
+              lastAuthorizationError = err;
+              continue;
+            }
+            throw err;
+          }
+        }
+
+        if (!result) {
+          if (lastAuthorizationError) {
+            throw lastAuthorizationError;
+          }
+          throw new ApiError('No se pudo obtener la lista de beneficiarios.', 500);
+        }
 
         const pageNumber = typeof result.pageNumber === 'number' ? result.pageNumber : page;
         const totalCount =
@@ -1747,8 +2667,11 @@ export function BeneficiariesPage({ authToken }: PageProps) {
         let message = 'No se pudo obtener la lista de beneficiarios.';
 
         if (err instanceof ApiError) {
-          if (err.status === 401 || err.status === 403) {
-            message = 'No tiene permisos para consultar los beneficiarios.';
+          if (err.status === 401) {
+            message = 'La sesión expiró o no es válida. Inicie sesión nuevamente.';
+          } else if (err.status === 403) {
+            message =
+              'El servicio no autorizó la consulta de beneficiarios para este perfil. Verifique con el equipo de TI si su cuenta tiene acceso.';
           } else if (err.message && err.message.trim().length > 0) {
             message = err.message.trim();
           }
@@ -1761,7 +2684,7 @@ export function BeneficiariesPage({ authToken }: PageProps) {
         setIsLoading(false);
       }
     },
-    [authToken, pageSize],
+    [authToken, pageSize, isAnalyst, isSupervisor, isAdmin, currentUser],
   );
 
   useEffect(() => {
@@ -1773,11 +2696,54 @@ export function BeneficiariesPage({ authToken }: PageProps) {
     setShowViewModal(true);
   };
 
-  const totalCount = pagination.totalCount;
-  const withEmail = beneficiaries.filter(
+  const filteredBeneficiaries = useMemo(() => {
+    if (!isAnalyst) {
+      return beneficiaries;
+    }
+    if (analystTokens.length === 0) {
+      return [];
+    }
+    return beneficiaries.filter((beneficiary) =>
+      matchAssignmentToTokens(extractBeneficiaryAssignmentInfo(beneficiary), analystTokens),
+    );
+  }, [beneficiaries, isAnalyst, analystTokens]);
+
+  useEffect(() => {
+    if (!isAnalyst) {
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(filteredBeneficiaries.length / pageSize));
+    setCurrentPage((previous) => {
+      if (previous > totalPages) {
+        return totalPages;
+      }
+      if (previous < 1) {
+        return 1;
+      }
+      return previous;
+    });
+  }, [filteredBeneficiaries, isAnalyst, pageSize]);
+
+  const effectivePagination = useMemo(() => {
+    if (!isAnalyst) {
+      return pagination;
+    }
+    const filteredCount = filteredBeneficiaries.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+    return {
+      totalCount: filteredCount,
+      totalPages,
+      hasNextPage: currentPage < totalPages,
+      hasPreviousPage: currentPage > 1,
+    };
+  }, [pagination, filteredBeneficiaries, isAnalyst, currentPage, pageSize]);
+
+  const displayedBeneficiaries = filteredBeneficiaries;
+  const totalCount = effectivePagination.totalCount;
+  const withEmail = displayedBeneficiaries.filter(
     (beneficiary) => typeof beneficiary.email === 'string' && beneficiary.email.trim(),
   ).length;
-  const withPhone = beneficiaries.filter(
+  const withPhone = displayedBeneficiaries.filter(
     (beneficiary) => typeof beneficiary.phoneNumber === 'string' && beneficiary.phoneNumber.trim(),
   ).length;
 
@@ -1791,28 +2757,179 @@ export function BeneficiariesPage({ authToken }: PageProps) {
       })
     : '—';
 
+  const formatAssignmentDateTime = useCallback((value?: string | null): string | null => {
+    if (!value) {
+      return null;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return date.toLocaleString('es-DO', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, []);
+
+  const selectedAssignment = useMemo(
+    () =>
+      selectedBeneficiary ? extractBeneficiaryAssignmentInfo(selectedBeneficiary) : null,
+    [selectedBeneficiary],
+  );
+
+  const loadAnalysts = useCallback(async () => {
+    if (!authToken) {
+      return;
+    }
+
+    setIsLoadingAnalysts(true);
+    setAnalystsError(null);
+
+    try {
+      const users = await getNonAdminUsers(authToken);
+      const mapped = mapAdminUsersToAnalystOptions(users);
+
+      if (mapped.length === 0) {
+        setAnalysts(FALLBACK_ANALYST_OPTIONS);
+        setAnalystsError('No se encontraron analistas disponibles en el sistema.');
+      } else {
+        setAnalysts(mapped);
+      }
+      setHasLoadedAnalysts(true);
+    } catch (err) {
+      console.error('Error cargando analistas', err);
+      let message = 'No se pudieron cargar los analistas disponibles.';
+      if (err instanceof ApiError && err.message && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && err.message && err.message.trim()) {
+        message = err.message.trim();
+      }
+      setAnalystsError(message);
+      if (!hasLoadedAnalysts) {
+        setAnalysts(FALLBACK_ANALYST_OPTIONS);
+      }
+      setHasLoadedAnalysts(true);
+    } finally {
+      setIsLoadingAnalysts(false);
+    }
+  }, [authToken, hasLoadedAnalysts]);
+
+  useEffect(() => {
+    if (!canAssignBeneficiaries || hasLoadedAnalysts || !authToken) {
+      return;
+    }
+    void loadAnalysts();
+  }, [canAssignBeneficiaries, hasLoadedAnalysts, authToken, loadAnalysts]);
+
+  const handleOpenAssignDialog = (beneficiary: BeneficiaryDto) => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para asignar beneficiarios.');
+      return;
+    }
+    if (!canAssignBeneficiaries) {
+      toast.error('No tiene permisos para asignar beneficiarios.');
+      return;
+    }
+
+    const assignment = extractBeneficiaryAssignmentInfo(beneficiary);
+    setAssignDialog({
+      open: true,
+      beneficiary,
+      selectedAnalystId: assignment.analystId ?? '',
+      notes: assignment.notes ?? '',
+      isSubmitting: false,
+      error: null,
+    });
+
+    if (!hasLoadedAnalysts && !isLoadingAnalysts) {
+      void loadAnalysts();
+    }
+  };
+
+  const handleConfirmAssignment = async () => {
+    if (!authToken) {
+      setAssignDialog((prev) => ({
+        ...prev,
+        error: 'Debe iniciar sesión para asignar beneficiarios.',
+      }));
+      return;
+    }
+
+    if (!assignDialog.beneficiary) {
+      return;
+    }
+
+    if (!assignDialog.selectedAnalystId) {
+      setAssignDialog((prev) => ({
+        ...prev,
+        error: 'Seleccione un analista para continuar.',
+      }));
+      return;
+    }
+
+    const beneficiaryId = resolveBeneficiaryIdentifier(assignDialog.beneficiary);
+    if (!beneficiaryId) {
+      setAssignDialog((prev) => ({
+        ...prev,
+        error: 'No se pudo determinar el identificador del beneficiario seleccionado.',
+      }));
+      return;
+    }
+
+    setAssignDialog((prev) => ({ ...prev, isSubmitting: true, error: null }));
+
+    try {
+      await assignBeneficiaryToAnalyst(authToken, beneficiaryId, {
+        analystId: assignDialog.selectedAnalystId,
+        notes: assignDialog.notes.trim() ? assignDialog.notes.trim() : undefined,
+      });
+
+      toast.success('Beneficiario asignado correctamente.');
+      setAssignDialog({ ...INITIAL_ASSIGN_DIALOG_STATE });
+      void loadBeneficiaries(currentPage, debouncedSearch);
+    } catch (err) {
+      console.error('Error asignando beneficiario', err);
+      let message = 'No se pudo completar la asignación del beneficiario.';
+      if (err instanceof ApiError && err.message && err.message.trim()) {
+        message = err.message.trim();
+      } else if (err instanceof Error && err.message && err.message.trim()) {
+        message = err.message.trim();
+      }
+      setAssignDialog((prev) => ({
+        ...prev,
+        error: message,
+        isSubmitting: false,
+      }));
+    }
+  };
+
+  const columnCount = 8;
+
   const renderTableBody = () => {
     if (isLoading) {
       return (
         <TableRow>
-          <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+          <TableCell colSpan={columnCount} className="py-8 text-center text-gray-500">
             Cargando beneficiarios...
           </TableCell>
         </TableRow>
       );
     }
 
-    if (beneficiaries.length === 0) {
+    if (displayedBeneficiaries.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+          <TableCell colSpan={columnCount} className="py-8 text-center text-gray-500">
             No se encontraron beneficiarios para la búsqueda indicada.
           </TableCell>
         </TableRow>
       );
     }
 
-    return beneficiaries.map((beneficiary) => {
+    return displayedBeneficiaries.map((beneficiary) => {
       const idValue =
         typeof beneficiary.id === 'string'
           ? beneficiary.id
@@ -1831,6 +2948,9 @@ export function BeneficiariesPage({ authToken }: PageProps) {
         typeof beneficiary.phoneNumber === 'string' && beneficiary.phoneNumber.trim().length > 0
           ? beneficiary.phoneNumber.trim()
           : '—';
+      const assignment = extractBeneficiaryAssignmentInfo(beneficiary);
+      const assignmentDateLabel = formatAssignmentDateTime(assignment.assignmentDate);
+      const isAssigned = Boolean(assignment.analystName);
 
       return (
         <TableRow key={`${idValue}-${nationalId}`}>
@@ -1842,19 +2962,49 @@ export function BeneficiariesPage({ authToken }: PageProps) {
           <TableCell className="text-sm text-gray-700">{email}</TableCell>
           <TableCell className="text-sm text-gray-700">{phone}</TableCell>
           <TableCell className="text-sm text-gray-700">
+            {isAssigned ? (
+              <div className="flex flex-col">
+                <span className="font-medium text-dr-blue">{assignment.analystName}</span>
+                {assignment.analystEmail && (
+                  <span className="text-xs text-gray-500">{assignment.analystEmail}</span>
+                )}
+                {assignmentDateLabel && (
+                  <span className="text-xs text-gray-500">Asignado el {assignmentDateLabel}</span>
+                )}
+                {assignment.supervisorName && (
+                  <span className="text-xs text-gray-500">Por {assignment.supervisorName}</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-sm text-gray-500">Sin asignar</span>
+            )}
+          </TableCell>
+          <TableCell className="text-sm text-gray-700">
             {formatBeneficiaryDate(
               typeof beneficiary.createdAt === 'string' ? beneficiary.createdAt : undefined,
             )}
           </TableCell>
           <TableCell>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleViewBeneficiary(beneficiary)}
-              className="text-dr-blue hover:bg-blue-50"
-            >
-              <Eye className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleViewBeneficiary(beneficiary)}
+                className="text-dr-blue hover:bg-blue-50"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              {canAssignBeneficiaries && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleOpenAssignDialog(beneficiary)}
+                  className="text-green-600 hover:bg-green-50"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </TableCell>
         </TableRow>
       );
@@ -1882,7 +3032,9 @@ export function BeneficiariesPage({ authToken }: PageProps) {
                 <p className="text-xl font-bold text-dr-dark-gray">
                   {totalCount.toLocaleString('es-DO')}
                 </p>
-                <p className="text-xs text-gray-500">Página actual: {beneficiaries.length}</p>
+                <p className="text-xs text-gray-500">
+                  Registros visibles: {displayedBeneficiaries.length.toLocaleString('es-DO')}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -1898,8 +3050,8 @@ export function BeneficiariesPage({ authToken }: PageProps) {
                 <p className="text-sm text-gray-600">Con correo (página)</p>
                 <p className="text-xl font-bold text-dr-dark-gray">{withEmail}</p>
                 <p className="text-xs text-gray-500">
-                  {beneficiaries.length > 0
-                    ? `${((withEmail / beneficiaries.length) * 100).toFixed(1)}%`
+                  {displayedBeneficiaries.length > 0
+                    ? `${((withEmail / displayedBeneficiaries.length) * 100).toFixed(1)}%`
                     : '—'}
                 </p>
               </div>
@@ -1917,8 +3069,8 @@ export function BeneficiariesPage({ authToken }: PageProps) {
                 <p className="text-sm text-gray-600">Con teléfono (página)</p>
                 <p className="text-xl font-bold text-dr-dark-gray">{withPhone}</p>
                 <p className="text-xs text-gray-500">
-                  {beneficiaries.length > 0
-                    ? `${((withPhone / beneficiaries.length) * 100).toFixed(1)}%`
+                  {displayedBeneficiaries.length > 0
+                    ? `${((withPhone / displayedBeneficiaries.length) * 100).toFixed(1)}%`
                     : '—'}
                 </p>
               </div>
@@ -1936,7 +3088,7 @@ export function BeneficiariesPage({ authToken }: PageProps) {
                 <p className="text-sm text-gray-600">Datos actualizados</p>
                 <p className="text-xl font-bold text-dr-dark-gray">{lastUpdatedText}</p>
                 <p className="text-xs text-gray-500">
-                  Página {currentPage} de {pagination.totalPages}
+                  Página {currentPage} de {effectivePagination.totalPages}
                 </p>
               </div>
             </div>
@@ -1982,7 +3134,7 @@ export function BeneficiariesPage({ authToken }: PageProps) {
         <CardHeader>
           <CardTitle>Beneficiarios</CardTitle>
           <CardDescription>
-            Mostrando {beneficiaries.length} registro{beneficiaries.length === 1 ? '' : 's'} en la página {currentPage}.
+            Mostrando {displayedBeneficiaries.length} registro{displayedBeneficiaries.length === 1 ? '' : 's'} en la página {currentPage}.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -1995,8 +3147,9 @@ export function BeneficiariesPage({ authToken }: PageProps) {
                   <TableHead className="min-w-[160px]">Cédula</TableHead>
                   <TableHead className="min-w-[200px]">Correo</TableHead>
                   <TableHead className="min-w-[160px]">Teléfono</TableHead>
+                  <TableHead className="min-w-[220px]">Asignado a</TableHead>
                   <TableHead className="min-w-[140px]">Registro</TableHead>
-                  <TableHead className="min-w-[100px]">Acciones</TableHead>
+                  <TableHead className="min-w-[120px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>{renderTableBody()}</TableBody>
@@ -2005,28 +3158,145 @@ export function BeneficiariesPage({ authToken }: PageProps) {
         </CardContent>
         <div className="flex flex-col gap-3 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-600">
-            Total: {totalCount.toLocaleString('es-DO')} | Página {currentPage} de {pagination.totalPages}
+            Total: {totalCount.toLocaleString('es-DO')} | Página {currentPage} de {effectivePagination.totalPages}
           </p>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={isLoading || (!pagination.hasPreviousPage && currentPage === 1)}
+              disabled={isLoading || !effectivePagination.hasPreviousPage}
             >
               Anterior
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage((prev) => (pagination.hasNextPage ? prev + 1 : prev))}
-              disabled={isLoading || !pagination.hasNextPage}
+              onClick={() =>
+                setCurrentPage((prev) => (effectivePagination.hasNextPage ? prev + 1 : prev))
+              }
+              disabled={isLoading || !effectivePagination.hasNextPage}
             >
               Siguiente
             </Button>
           </div>
         </div>
       </Card>
+
+      <Dialog
+        open={assignDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssignDialog({ ...INITIAL_ASSIGN_DIALOG_STATE });
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-dr-blue" />
+              Asignar beneficiario
+            </DialogTitle>
+            <DialogDescription>
+              Seleccione el analista que dará seguimiento al beneficiario.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {assignDialog.beneficiary && (
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-sm font-semibold text-dr-dark-gray">
+                  {buildBeneficiaryName(assignDialog.beneficiary)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  ID: {resolveBeneficiaryIdentifier(assignDialog.beneficiary) ?? '—'}
+                </p>
+                {assignDialog.beneficiary.nationalId && (
+                  <p className="text-xs text-gray-500">
+                    Cédula: {assignDialog.beneficiary.nationalId}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="beneficiary-analyst">Seleccionar analista *</Label>
+              <Select
+                value={assignDialog.selectedAnalystId}
+                onValueChange={(value) =>
+                  setAssignDialog((prev) => ({
+                    ...prev,
+                    selectedAnalystId: value,
+                    error: null,
+                  }))
+                }
+                disabled={isLoadingAnalysts}
+              >
+                <SelectTrigger id="beneficiary-analyst" className="w-full">
+                  <SelectValue
+                    placeholder={
+                      isLoadingAnalysts ? 'Cargando analistas...' : 'Seleccione un analista'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {analysts.map((analyst) => (
+                    <SelectItem key={analyst.id} value={analyst.id}>
+                      {analyst.name}
+                      {analyst.email ? ` — ${analyst.email}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {analystsError && (
+                <p className="text-xs text-red-600">{analystsError}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="beneficiary-assignment-notes">Comentarios (opcional)</Label>
+              <Textarea
+                id="beneficiary-assignment-notes"
+                placeholder="Agregue instrucciones para el analista..."
+                rows={3}
+                value={assignDialog.notes}
+                onChange={(event) =>
+                  setAssignDialog((prev) => ({ ...prev, notes: event.target.value }))
+                }
+                disabled={assignDialog.isSubmitting}
+              />
+            </div>
+
+            {assignDialog.error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">
+                  {assignDialog.error}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAssignDialog({ ...INITIAL_ASSIGN_DIALOG_STATE })}
+              disabled={assignDialog.isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-dr-blue hover:bg-dr-blue-dark text-white"
+              onClick={handleConfirmAssignment}
+              disabled={assignDialog.isSubmitting || !assignDialog.selectedAnalystId}
+            >
+              {assignDialog.isSubmitting ? 'Asignando...' : 'Asignar beneficiario'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
         <DialogContent className="max-w-3xl">
@@ -2106,14 +3376,41 @@ export function BeneficiariesPage({ authToken }: PageProps) {
                   )}
                 </p>
               </div>
+              <div>
+                <p className="text-xs uppercase text-gray-500">Analista asignado</p>
+                <p className="text-sm text-dr-dark-gray">
+                  {selectedAssignment?.analystName ?? 'Sin asignar'}
+                </p>
+                {selectedAssignment?.analystEmail && (
+                  <p className="text-xs text-gray-500">{selectedAssignment.analystEmail}</p>
+                )}
+                {selectedAssignment?.supervisorName && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Asignado por {selectedAssignment.supervisorName}
+                  </p>
+                )}
+                {selectedAssignment?.assignmentDate && (
+                  <p className="text-xs text-gray-500">
+                    Fecha de asignación:{' '}
+                    {formatAssignmentDateTime(selectedAssignment.assignmentDate) ??
+                      formatBeneficiaryDate(selectedAssignment.assignmentDate)}
+                  </p>
+                )}
+              </div>
               <div className="sm:col-span-2">
-                <p className="text-xs uppercase text-gray-500">Notas</p>
+                <p className="text-xs uppercase text-gray-500">Notas del beneficiario</p>
                 <p className="text-sm text-gray-700">
                   {typeof selectedBeneficiary.notes === 'string' && selectedBeneficiary.notes.trim()
                     ? selectedBeneficiary.notes.trim()
                     : 'Sin notas registradas.'}
                 </p>
               </div>
+              {selectedAssignment?.notes && (
+                <div className="sm:col-span-2">
+                  <p className="text-xs uppercase text-gray-500">Notas de asignación</p>
+                  <p className="text-sm text-gray-700">{selectedAssignment.notes}</p>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-gray-500">Seleccione un beneficiario para ver sus datos.</p>
@@ -2136,8 +3433,81 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
   const [activeUsersReport, setActiveUsersReport] = useState<any>(null);
   const [usersByRoleReport, setUsersByRoleReport] = useState<any>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [selectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth] = useState(new Date().getMonth() + 1);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentMonth = useMemo(() => new Date().getMonth() + 1, []);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+  const availableYears = useMemo(() => {
+    const years: number[] = [];
+    for (let year = currentYear; year >= currentYear - 5; year -= 1) {
+      years.push(year);
+    }
+    return years;
+  }, [currentYear]);
+
+  const monthOptions = useMemo(
+    () => [
+      { value: 1, label: 'Enero' },
+      { value: 2, label: 'Febrero' },
+      { value: 3, label: 'Marzo' },
+      { value: 4, label: 'Abril' },
+      { value: 5, label: 'Mayo' },
+      { value: 6, label: 'Junio' },
+      { value: 7, label: 'Julio' },
+      { value: 8, label: 'Agosto' },
+      { value: 9, label: 'Septiembre' },
+      { value: 10, label: 'Octubre' },
+      { value: 11, label: 'Noviembre' },
+      { value: 12, label: 'Diciembre' },
+    ],
+    [],
+  );
+
+  const resolveReportErrorMessage = useCallback(
+    (error: unknown, fallback: string, context?: { year?: number; month?: number }) => {
+      const getMonthLabel = (monthValue?: number) =>
+        monthValue
+          ? monthOptions.find((option) => option.value === monthValue)?.label ??
+            `Mes ${monthValue}`
+          : null;
+
+      if (error instanceof ApiError) {
+        if (error.status === 401) {
+          return 'La sesión expiró o no es válida. Inicie sesión nuevamente para generar el reporte.';
+        }
+        if (error.status === 403) {
+          return 'No tiene permiso para generar este reporte. Verifique sus credenciales o contacte a soporte.';
+        }
+        if (error.status === 404) {
+          if (context?.year && context?.month) {
+            return `No hay datos disponibles para ${getMonthLabel(context.month) ?? `el mes ${context.month}`} ${context.year}.`;
+          }
+          if (context?.year) {
+            return `No hay datos disponibles para el año ${context.year}.`;
+          }
+          return 'No se encontraron datos para el período seleccionado.';
+        }
+        if (error.status === 500) {
+          if (context?.year && context?.month) {
+            return `El servidor no pudo generar el reporte de ${getMonthLabel(context.month) ?? `mes ${context.month}`} ${context.year}. Intente con otro período o contacte al equipo de TI.`;
+          }
+          if (context?.year) {
+            return `El servidor no pudo generar el reporte anual ${context.year}. Intente con otro año o contacte al equipo de TI.`;
+          }
+          return 'El servidor no pudo generar el reporte solicitado. Intente más tarde.';
+        }
+        if (error.message && error.message.trim()) {
+          return error.message.trim();
+        }
+      }
+      if (error instanceof Error && error.message.trim()) {
+        return error.message.trim();
+      }
+      return fallback;
+    },
+    [monthOptions],
+  );
 
   // Load reports from backend
   useEffect(() => {
@@ -2177,7 +3547,12 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
       toast.success('Reporte mensual cargado');
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Error al cargar reporte mensual');
+      toast.error(
+        resolveReportErrorMessage(error, 'Error al cargar reporte mensual.', {
+          year: selectedYear,
+          month: selectedMonth,
+        }),
+      );
     }
   };
 
@@ -2190,7 +3565,103 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
       toast.success('Reporte anual cargado');
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Error al cargar reporte anual');
+      toast.error(
+        resolveReportErrorMessage(error, 'Error al cargar reporte anual.', {
+          year: selectedYear,
+        }),
+      );
+    }
+  };
+
+  // Download functions
+  const handleDownloadPDF = async (reportType: string) => {
+    if (!authToken) return;
+    
+    let context: { year?: number; month?: number } | undefined;
+
+    try {
+      let blob: Blob;
+      let filename: string;
+      
+      switch (reportType) {
+        case 'requests-count':
+          blob = await downloadRequestCountReportPDF(authToken);
+          filename = `reporte-conteo-solicitudes-${new Date().toISOString().split('T')[0]}.pdf`;
+          break;
+        case 'monthly-requests':
+          blob = await downloadMonthlyRequestReportPDF(authToken, selectedYear, selectedMonth);
+          filename = `reporte-mensual-solicitudes-${selectedYear}-${selectedMonth.toString().padStart(2, '0')}.pdf`;
+          context = { year: selectedYear, month: selectedMonth };
+          break;
+        case 'annual-requests':
+          blob = await downloadAnnualRequestReportPDF(authToken, selectedYear);
+          filename = `reporte-anual-solicitudes-${selectedYear}.pdf`;
+          context = { year: selectedYear };
+          break;
+        case 'active-users':
+          blob = await downloadActiveUsersReportPDF(authToken);
+          filename = `reporte-usuarios-activos-${new Date().toISOString().split('T')[0]}.pdf`;
+          break;
+        case 'users-by-role':
+          blob = await downloadUsersByRoleReportPDF(authToken);
+          filename = `reporte-usuarios-por-rol-${new Date().toISOString().split('T')[0]}.pdf`;
+          break;
+        default:
+          throw new Error('Tipo de reporte no válido');
+      }
+      
+      downloadBlobAsFile(blob, filename);
+      toast.success('Reporte PDF descargado exitosamente');
+    } catch (error) {
+      console.error('Error descargando PDF:', error);
+      toast.error(
+        resolveReportErrorMessage(error, 'Error al descargar el reporte PDF.', context),
+      );
+    }
+  };
+
+  const handleDownloadExcel = async (reportType: string) => {
+    if (!authToken) return;
+    let context: { year?: number; month?: number } | undefined;
+
+    try {
+      let blob: Blob;
+      let filename: string;
+      
+      switch (reportType) {
+        case 'requests-count':
+          blob = await downloadRequestCountReportExcel(authToken);
+          filename = `reporte-conteo-solicitudes-${new Date().toISOString().split('T')[0]}.xlsx`;
+          break;
+        case 'monthly-requests':
+          blob = await downloadMonthlyRequestReportExcel(authToken, selectedYear, selectedMonth);
+          filename = `reporte-mensual-solicitudes-${selectedYear}-${selectedMonth.toString().padStart(2, '0')}.xlsx`;
+          context = { year: selectedYear, month: selectedMonth };
+          break;
+        case 'annual-requests':
+          blob = await downloadAnnualRequestReportExcel(authToken, selectedYear);
+          filename = `reporte-anual-solicitudes-${selectedYear}.xlsx`;
+          context = { year: selectedYear };
+          break;
+        case 'active-users':
+          blob = await downloadActiveUsersReportExcel(authToken);
+          filename = `reporte-usuarios-activos-${new Date().toISOString().split('T')[0]}.xlsx`;
+          break;
+        case 'users-by-role':
+          blob = await downloadUsersByRoleReportExcel(authToken);
+          filename = `reporte-usuarios-por-rol-${new Date().toISOString().split('T')[0]}.xlsx`;
+          break;
+        default:
+          throw new Error('Tipo de reporte no válido');
+      }
+      
+      downloadBlobAsFile(blob, filename);
+      toast.success('Reporte Excel descargado exitosamente');
+    } catch (error) {
+      console.error('Error descargando Excel:', error);
+      toast.error(
+        resolveReportErrorMessage(error, 'Error al descargar el reporte Excel.', context),
+      );
     }
   };
 
@@ -2272,104 +3743,238 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div className="flex flex-wrap gap-3 items-center">
+              <div>
+                <span className="block text-xs uppercase text-gray-500 mb-1">Año</span>
+                <Select
+                  value={String(selectedYear)}
+                  onValueChange={(value) => {
+                    const parsed = Number.parseInt(value, 10);
+                    if (!Number.isNaN(parsed)) {
+                      setSelectedYear(parsed);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Seleccione un año" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <span className="block text-xs uppercase text-gray-500 mb-1">Mes</span>
+                <Select
+                  value={String(selectedMonth)}
+                  onValueChange={(value) => {
+                    const parsed = Number.parseInt(value, 10);
+                    if (!Number.isNaN(parsed)) {
+                      setSelectedMonth(parsed);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Seleccione un mes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map((option) => (
+                      <SelectItem key={option.value} value={String(option.value)}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 max-w-xs">
+              Los reportes se generan usando el año y mes seleccionados. Si un período devuelve error,
+              intente con otro disponible.
+            </p>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Button 
-              variant="outline" 
-              className="h-auto p-6 text-left"
-              onClick={handleViewMonthlyReport}
-            >
-              <div className="flex items-start gap-4">
-                <FileText className="h-8 w-8 text-dr-blue flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="font-semibold text-dr-dark-gray">Reporte Mensual de Solicitudes</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Solicitudes del mes actual con desglose por estado y tipo
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <ArrowRight className="h-4 w-4 text-dr-blue" />
-                    <span className="text-sm text-dr-blue">Ver reporte</span>
+            <Card className="border-2 border-dashed border-gray-200 hover:border-dr-blue transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <FileText className="h-8 w-8 text-dr-blue flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-dr-dark-gray">Reporte Mensual de Solicitudes</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Solicitudes del mes actual con desglose por estado y tipo
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        size="sm" 
+                        onClick={handleViewMonthlyReport}
+                        className="bg-dr-blue hover:bg-dr-blue-dark"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadPDF('monthly-requests')}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        PDF
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadExcel('monthly-requests')}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-1" />
+                        Excel
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Button>
+              </CardContent>
+            </Card>
 
-            <Button 
-              variant="outline" 
-              className="h-auto p-6 text-left"
-              onClick={handleViewAnnualReport}
-            >
-              <div className="flex items-start gap-4">
-                <TrendingUp className="h-8 w-8 text-green-600 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="font-semibold text-dr-dark-gray">Reporte Anual de Solicitudes</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Análisis anual con desglose mensual de solicitudes
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <ArrowRight className="h-4 w-4 text-green-600" />
-                    <span className="text-sm text-green-600">Ver reporte</span>
+            <Card className="border-2 border-dashed border-gray-200 hover:border-green-600 transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <TrendingUp className="h-8 w-8 text-green-600 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-dr-dark-gray">Reporte Anual de Solicitudes</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Análisis anual con desglose mensual de solicitudes
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        size="sm" 
+                        onClick={handleViewAnnualReport}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadPDF('annual-requests')}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        PDF
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadExcel('annual-requests')}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-1" />
+                        Excel
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Button>
+              </CardContent>
+            </Card>
 
-            <Button 
-              variant="outline" 
-              className="h-auto p-6 text-left"
-              onClick={async () => {
-                if (!authToken) return;
-                try {
-                  const report = await getActiveUsersReport(authToken);
-                  console.log('Usuarios activos:', report);
-                  toast.success('Reporte de usuarios activos cargado');
-                } catch (error) {
-                  toast.error('Error al cargar reporte');
-                }
-              }}
-            >
-              <div className="flex items-start gap-4">
-                <Users className="h-8 w-8 text-amber-600 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios Activos</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Usuarios activos agrupados por departamento y provincia
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <ArrowRight className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm text-amber-600">Ver reporte</span>
+            <Card className="border-2 border-dashed border-gray-200 hover:border-amber-600 transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <Users className="h-8 w-8 text-amber-600 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios Activos</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Usuarios activos agrupados por departamento y provincia
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        size="sm" 
+                        onClick={async () => {
+                          if (!authToken) return;
+                          try {
+                            const report = await getActiveUsersReport(authToken);
+                            console.log('Usuarios activos:', report);
+                            toast.success('Reporte de usuarios activos cargado');
+                          } catch (error) {
+                            toast.error('Error al cargar reporte');
+                          }
+                        }}
+                        className="bg-amber-600 hover:bg-amber-700"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadPDF('active-users')}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        PDF
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadExcel('active-users')}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-1" />
+                        Excel
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Button>
+              </CardContent>
+            </Card>
 
-            <Button 
-              variant="outline" 
-              className="h-auto p-6 text-left"
-              onClick={async () => {
-                if (!authToken) return;
-                try {
-                  const report = await getUsersByRoleReport(authToken);
-                  console.log('Usuarios por rol:', report);
-                  toast.success('Reporte de usuarios por rol cargado');
-                } catch (error) {
-                  toast.error('Error al cargar reporte');
-                }
-              }}
-            >
-              <div className="flex items-start gap-4">
-                <ClipboardList className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios por Roles</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Distribución de usuarios agrupados por roles del sistema
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <ArrowRight className="h-4 w-4 text-purple-600" />
-                    <span className="text-sm text-purple-600">Ver reporte</span>
+            <Card className="border-2 border-dashed border-gray-200 hover:border-purple-600 transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <ClipboardList className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios por Roles</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Distribución de usuarios agrupados por roles del sistema
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        size="sm" 
+                        onClick={async () => {
+                          if (!authToken) return;
+                          try {
+                            const report = await getUsersByRoleReport(authToken);
+                            console.log('Usuarios por rol:', report);
+                            toast.success('Reporte de usuarios por rol cargado');
+                          } catch (error) {
+                            toast.error('Error al cargar reporte');
+                          }
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadPDF('users-by-role')}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        PDF
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadExcel('users-by-role')}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-1" />
+                        Excel
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Button>
+              </CardContent>
+            </Card>
           </div>
         </CardContent>
       </Card>

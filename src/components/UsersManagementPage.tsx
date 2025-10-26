@@ -56,6 +56,7 @@ import {
   getProvinces,
   getRoles,
   resetUserPassword,
+  updateUser,
   updateUserRole,
 } from '../services/api';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -107,6 +108,21 @@ interface PasswordDialogState {
   error: string | null;
 }
 
+interface EditDialogState {
+  open: boolean;
+  userId: string | null;
+  user: AdminUserDto | null;
+  formData: {
+    fullName: string;
+    email: string;
+    jobTitle: string;
+    department: string;
+    province: string;
+  };
+  isSubmitting: boolean;
+  error: string | null;
+}
+
 type StatusAction = 'enable' | 'disable';
 
 interface StatusDialogState {
@@ -137,55 +153,116 @@ const resolveString = (
   return fallback;
 };
 
+type NormalizedStatusKey = 'active' | 'inactive' | 'suspended' | 'pending' | 'unknown';
+
+const STATUS_KEYWORD_MAP: Record<Exclude<NormalizedStatusKey, 'unknown'>, string[]> = {
+  active: ['active', 'activo', 'enabled', 'habilitado', 'true', '1'],
+  inactive: ['inactive', 'inactivo', 'disabled', 'deshabilitado', 'false', '0'],
+  suspended: ['suspended', 'suspendido', 'suspension', '2'],
+  pending: ['pending', 'pendiente', 'review', 'en_revision'],
+};
+
+const STATUS_ROLE_HINTS: Array<{ tokens: string[]; label: string }> = [
+  { tokens: ['supervisor', 'manager', 'coordinador', 'coordinator'], label: 'Supervisor' },
+  { tokens: ['analista', 'analyst'], label: 'Analista' },
+  { tokens: ['admin', 'administrador', 'administrator'], label: 'Administrador' },
+];
+
+const detectRoleHint = (normalized: string): string | null => {
+  for (const { tokens, label } of STATUS_ROLE_HINTS) {
+    if (tokens.some((token) => normalized.includes(token))) {
+      return label;
+    }
+  }
+  return null;
+};
+
+const normalizeStatusKey = (status: unknown): { key: NormalizedStatusKey; roleHint: string | null } => {
+  if (status === null || status === undefined) {
+    return { key: 'unknown', roleHint: null };
+  }
+
+  if (typeof status === 'number') {
+    if (status === 1) return { key: 'active', roleHint: null };
+    if (status === 0) return { key: 'inactive', roleHint: null };
+    if (status === 2) return { key: 'suspended', roleHint: null };
+    return { key: 'unknown', roleHint: null };
+  }
+
+  if (typeof status === 'string') {
+    const normalized = status.trim().toLowerCase();
+    if (!normalized) {
+      return { key: 'unknown', roleHint: null };
+    }
+
+    for (const [key, tokens] of Object.entries(STATUS_KEYWORD_MAP) as Array<
+      [Exclude<NormalizedStatusKey, 'unknown'>, string[]]
+    >) {
+      if (
+        tokens.some(
+          (token) =>
+            normalized === token ||
+            normalized.includes(token) ||
+            normalized.replace(/[\s_-]+/g, '') === token.replace(/[\s_-]+/g, ''),
+        )
+      ) {
+        return { key, roleHint: detectRoleHint(normalized) };
+      }
+    }
+
+    // Fallback for common numeric strings
+    if (!Number.isNaN(Number.parseInt(normalized, 10))) {
+      return normalizeStatusKey(Number.parseInt(normalized, 10));
+    }
+
+    return { key: 'unknown', roleHint: detectRoleHint(normalized) };
+  }
+
+  if (typeof status === 'boolean') {
+    return { key: status ? 'active' : 'inactive', roleHint: null };
+  }
+
+  return { key: 'unknown', roleHint: null };
+};
+
 const resolveStatusDescriptor = (
   status: AdminUserDto['status'],
 ): { label: string; className: string } => {
-  if (status === null || status === undefined) {
-    return { label: 'Desconocido', className: 'bg-gray-100 text-gray-700 border-gray-200' };
-  }
+  const { key, roleHint } = normalizeStatusKey(status);
 
-  if (typeof status === 'number') {
-    switch (status) {
-      case 1:
-        return { label: 'Activo', className: 'bg-green-100 text-green-800 border-green-200' };
-      case 0:
-        return { label: 'Inactivo', className: 'bg-red-100 text-red-800 border-red-200' };
-      case 2:
-        return { label: 'Suspendido', className: 'bg-amber-100 text-amber-800 border-amber-200' };
-      default:
-        return { label: `Estado ${status}`, className: 'bg-blue-100 text-blue-800 border-blue-200' };
-    }
-  }
+  const appendRoleHint = (label: string) => (roleHint ? `${label} (${roleHint})` : label);
 
-  if (typeof status === 'string') {
-    const normalized = status.toLowerCase();
-    if (['active', 'activo', '1'].includes(normalized)) {
-      return { label: 'Activo', className: 'bg-green-100 text-green-800 border-green-200' };
-    }
-    if (['inactive', 'inactivo', '0'].includes(normalized)) {
-      return { label: 'Inactivo', className: 'bg-red-100 text-red-800 border-red-200' };
-    }
-    if (['suspended', 'suspendido', '2'].includes(normalized)) {
-      return { label: 'Suspendido', className: 'bg-amber-100 text-amber-800 border-amber-200' };
-    }
-    if (['pending', 'pendiente'].includes(normalized)) {
-      return { label: 'Pendiente', className: 'bg-blue-100 text-blue-800 border-blue-200' };
-    }
-    return { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200' };
+  switch (key) {
+    case 'active':
+      return {
+        label: appendRoleHint('Activo'),
+        className: 'bg-green-100 text-green-800 border-green-200',
+      };
+    case 'inactive':
+      return {
+        label: appendRoleHint('Inactivo'),
+        className: 'bg-red-100 text-red-800 border-red-200',
+      };
+    case 'suspended':
+      return {
+        label: appendRoleHint('Suspendido'),
+        className: 'bg-amber-100 text-amber-800 border-amber-200',
+      };
+    case 'pending':
+      return {
+        label: appendRoleHint('Pendiente'),
+        className: 'bg-blue-100 text-blue-800 border-blue-200',
+      };
+    default:
+      return {
+        label: typeof status === 'string' && status.trim() ? status : 'Desconocido',
+        className: 'bg-gray-100 text-gray-700 border-gray-200',
+      };
   }
-
-  return { label: 'Desconocido', className: 'bg-gray-100 text-gray-700 border-gray-200' };
 };
 
 const isActiveStatus = (status: AdminUserDto['status']): boolean => {
-  if (typeof status === 'number') {
-    return status === 1;
-  }
-  if (typeof status === 'string') {
-    const normalized = status.toLowerCase();
-    return ['1', 'active', 'activo', 'enabled', 'true'].includes(normalized);
-  }
-  return false;
+  return normalizeStatusKey(status).key === 'active';
 };
 
 const formatDateTime = (value?: string | null): string => {
@@ -212,11 +289,17 @@ const resolveOptionValue = (item: ReferenceItem): string => {
   for (const candidate of candidates) {
     const value = item[candidate];
     if (typeof value === 'string' && value.trim().length > 0) {
-      return value;
+      return value.trim();
+    }
+    if (typeof value === 'number') {
+      return String(value);
     }
   }
   if (typeof item.name === 'string' && item.name.trim()) {
-    return item.name;
+    return item.name.trim();
+  }
+  if (typeof item.name === 'number') {
+    return String(item.name);
   }
   return String(item.id ?? item.code ?? item.key ?? item.name ?? '');
 };
@@ -230,6 +313,45 @@ const resolveOptionLabel = (item: ReferenceItem): string => {
     }
   }
   return resolveOptionValue(item);
+};
+
+const normalizeSelectCandidate = (candidate: unknown): string | null => {
+  if (candidate === null || candidate === undefined) {
+    return null;
+  }
+  if (typeof candidate === 'string') {
+    const trimmed = candidate.trim();
+    return trimmed.length > 0 && trimmed !== '—' ? trimmed : null;
+  }
+  if (typeof candidate === 'number') {
+    return String(candidate);
+  }
+  return null;
+};
+
+const resolveOptionSelection = (
+  options: { value: string; label: string }[],
+  candidates: unknown[],
+): { value: string; matched: boolean } => {
+  const normalizedCandidates = candidates
+    .map((candidate) => normalizeSelectCandidate(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of normalizedCandidates) {
+    const matchByValue = options.find((option) => option.value === candidate);
+    if (matchByValue) {
+      return { value: matchByValue.value, matched: true };
+    }
+
+    const matchByLabel = options.find(
+      (option) => option.label.toLowerCase() === candidate.toLowerCase(),
+    );
+    if (matchByLabel) {
+      return { value: matchByLabel.value, matched: true };
+    }
+  }
+
+  return { value: normalizedCandidates[0] ?? 'none', matched: false };
 };
 
 const USER_IDENTIFIER_KEYS = [
@@ -329,6 +451,21 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
     userId: null,
     user: null,
     newPassword: '',
+    isSubmitting: false,
+    error: null,
+  });
+
+  const [editDialog, setEditDialog] = useState<EditDialogState>({
+    open: false,
+    userId: null,
+    user: null,
+    formData: {
+      fullName: '',
+      email: '',
+      jobTitle: '',
+      department: 'none',
+      province: 'none',
+    },
     isSubmitting: false,
     error: null,
   });
@@ -602,6 +739,22 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       error: null,
     });
 
+  const resetEditDialogState = () =>
+    setEditDialog({
+      open: false,
+      userId: null,
+      user: null,
+      formData: {
+        fullName: '',
+        email: '',
+        jobTitle: '',
+        department: 'none',
+        province: 'none',
+      },
+      isSubmitting: false,
+      error: null,
+    });
+
   const resetStatusDialogState = () =>
     setStatusDialog({
       open: false,
@@ -828,6 +981,107 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       }
 
       setPasswordDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  };
+
+  const handleOpenEditDialog = (user: AdminUserDto) => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para editar el usuario.');
+      return;
+    }
+
+    if (!referencesReady && !isLoadingReferences) {
+      void loadReferences();
+    }
+
+    const record = user as Record<string, unknown>;
+    const departmentSelection = resolveOptionSelection(departmentOptions, [
+      record.departmentId,
+      record.department,
+      record.departmentName,
+    ]);
+    const provinceSelection = resolveOptionSelection(provinceOptions, [
+      record.provinceId,
+      record.province,
+      record.provinceName,
+    ]);
+
+    const formData = {
+      fullName: resolveString(user, ['fullName', 'name'], ''),
+      email: resolveString(user, ['email'], ''),
+      jobTitle: resolveString(user, ['jobTitle'], ''),
+      department: departmentSelection.value,
+      province: provinceSelection.value,
+    };
+
+    setEditDialog({
+      open: true,
+      userId: user.userId || user.id || null,
+      user,
+      formData,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  const handleSubmitEditDialog = async () => {
+    if (!authToken) {
+      toast.warning('Debe iniciar sesión para editar el usuario.');
+      return;
+    }
+
+    if (!editDialog.userId) {
+      toast.error('ID de usuario no válido.');
+      return;
+    }
+
+    const { fullName, email, jobTitle, department, province } = editDialog.formData;
+
+    if (!fullName.trim() || !email.trim()) {
+      setEditDialog(prev => ({
+        ...prev,
+        error: 'El nombre completo y el email son obligatorios.',
+      }));
+      return;
+    }
+
+    setEditDialog(prev => ({ ...prev, isSubmitting: true, error: null }));
+
+    try {
+      const departmentIdValue = department === 'none' ? null : department;
+      const provinceIdValue = province === 'none' ? null : province;
+
+      const payload = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        jobTitle: jobTitle.trim() || null,
+        department: departmentIdValue,
+        departmentId: departmentIdValue,
+        province: provinceIdValue,
+        provinceId: provinceIdValue,
+      };
+
+      await updateUser(authToken, editDialog.userId, payload);
+
+      toast.success('Usuario actualizado correctamente.');
+      resetEditDialogState();
+      await loadUsers();
+    } catch (err) {
+      console.error('Error actualizando usuario', err);
+      let message = 'No se pudo actualizar el usuario.';
+      
+      if (err instanceof ApiError) {
+        message = err.message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+
+      setEditDialog(prev => ({
         ...prev,
         isSubmitting: false,
         error: message,
@@ -1304,13 +1558,13 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                           {formatDateTime(lastLogin)}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1">
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   type="button"
                                   variant="ghost"
-                                  className="h-9 w-9 p-0 text-dr-blue hover:bg-dr-blue/10"
+                                  className="h-9 w-9 p-0 text-blue-600 hover:bg-blue-50"
                                   onClick={() => handleOpenViewDialog(user)}
                                   aria-label="Ver detalles"
                                   disabled={!authToken}
@@ -1325,12 +1579,29 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                                 <Button
                                   type="button"
                                   variant="ghost"
+                                  className="h-9 w-9 p-0 text-green-600 hover:bg-green-50"
+                                  onClick={() => handleOpenEditDialog(user)}
+                                  aria-label="Editar usuario"
+                                  disabled={roleChangeDisabled}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {roleChangeDisabled ? 'Permiso requerido' : 'Editar usuario'}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
                                   className="h-9 w-9 p-0 text-amber-600 hover:bg-amber-50"
                                   onClick={() => handleOpenRoleDialog(user)}
                                   aria-label="Actualizar rol"
                                   disabled={roleChangeDisabled}
                                 >
-                                  <Pencil className="h-4 w-4" />
+                                  <Shield className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -1657,6 +1928,158 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
               disabled={passwordDialog.isSubmitting}
             >
               {passwordDialog.isSubmitting ? 'Actualizando...' : 'Restablecer contraseña'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetEditDialogState();
+          }
+        }}
+      >
+        <DialogContent className="w-full max-w-sm sm:max-w-md max-h-[75vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Usuario</DialogTitle>
+            <DialogDescription>
+              Actualice la información del usuario seleccionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editDialog.error && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-700">{editDialog.error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1">
+              <Label htmlFor="edit-fullName" className="text-sm font-medium">Nombre Completo *</Label>
+              <Input
+                id="edit-fullName"
+                value={editDialog.formData.fullName}
+                onChange={(e) =>
+                  setEditDialog(prev => ({
+                    ...prev,
+                    formData: { ...prev.formData, fullName: e.target.value },
+                  }))
+                }
+                disabled={editDialog.isSubmitting}
+                placeholder="Ingrese el nombre completo"
+                className="h-9"
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <Label htmlFor="edit-email" className="text-sm font-medium">Correo Electrónico *</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editDialog.formData.email}
+                onChange={(e) =>
+                  setEditDialog(prev => ({
+                    ...prev,
+                    formData: { ...prev.formData, email: e.target.value },
+                  }))
+                }
+                disabled={editDialog.isSubmitting}
+                placeholder="correo@ejemplo.com"
+                className="h-9"
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <Label htmlFor="edit-jobTitle" className="text-sm font-medium">Cargo</Label>
+              <Input
+                id="edit-jobTitle"
+                value={editDialog.formData.jobTitle}
+                onChange={(e) =>
+                  setEditDialog(prev => ({
+                    ...prev,
+                    formData: { ...prev.formData, jobTitle: e.target.value },
+                  }))
+                }
+                disabled={editDialog.isSubmitting}
+                placeholder="Ingrese el cargo"
+                className="h-9"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-1">
+                <Label htmlFor="edit-department" className="text-sm font-medium">Departamento</Label>
+                <Select
+                  value={editDialog.formData.department}
+                  onValueChange={(value) =>
+                    setEditDialog(prev => ({
+                      ...prev,
+                      formData: { ...prev.formData, department: value },
+                    }))
+                  }
+                  disabled={editDialog.isSubmitting}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin departamento</SelectItem>
+                    {departmentOptions.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-1">
+                <Label htmlFor="edit-province" className="text-sm font-medium">Provincia</Label>
+                <Select
+                  value={editDialog.formData.province}
+                  onValueChange={(value) =>
+                    setEditDialog(prev => ({
+                      ...prev,
+                      formData: { ...prev.formData, province: value },
+                    }))
+                  }
+                  disabled={editDialog.isSubmitting}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin provincia</SelectItem>
+                    {provinceOptions.map((province) => (
+                      <SelectItem key={province.value} value={province.value}>
+                        {province.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetEditDialogState}
+              disabled={editDialog.isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSubmitEditDialog}
+              disabled={editDialog.isSubmitting}
+            >
+              {editDialog.isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
           </DialogFooter>
         </DialogContent>

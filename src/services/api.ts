@@ -111,6 +111,61 @@ export async function apiFetch<TResponse = unknown>(
   return response.json() as Promise<TResponse>;
 }
 
+const buildAuthorizationHeader = (token: string): string =>
+  token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+
+const normalisePath = (path: string): string => (path.startsWith('/') ? path : `/${path}`);
+
+const extractErrorDetails = async (response: Response): Promise<{ message: string; details?: unknown }> => {
+  let details: unknown;
+  try {
+    const contentType = response.headers.get('Content-Type') ?? '';
+    if (contentType.includes('application/json')) {
+      details = await response.json();
+    } else {
+      const text = await response.text();
+      details = text || undefined;
+    }
+  } catch {
+    details = undefined;
+  }
+
+  const message =
+    (typeof details === 'object' &&
+      details &&
+      'message' in details &&
+      typeof (details as Record<string, unknown>).message === 'string' &&
+      (details as Record<string, unknown>).message)
+      ? ((details as Record<string, unknown>).message as string)
+      : `Solicitud fallida (${response.status})`;
+
+  return { message, details };
+};
+
+async function fetchReportBlob(
+  path: string,
+  token: string,
+  accept: string = 'application/octet-stream',
+): Promise<Blob> {
+  const url = `${API_BASE_URL}${normalisePath(path)}`;
+  const headers = new Headers({
+    Authorization: buildAuthorizationHeader(token),
+    Accept: accept,
+  });
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    const { message, details } = await extractErrorDetails(response);
+    throw new ApiError(message, response.status, details);
+  }
+
+  return response.blob();
+}
+
 export interface LoginResult {
   token: string;
   refreshToken?: string;
@@ -314,6 +369,28 @@ export async function createUser(token: string, payload: CreateUserPayload): Pro
   });
 }
 
+export interface UpdateUserPayload {
+  fullName?: string;
+  email?: string;
+  jobTitle?: string | null;
+  department?: string | null;
+  departmentId?: string | null;
+  province?: string | null;
+  provinceId?: string | null;
+}
+
+export async function updateUser(
+  token: string,
+  userId: string,
+  payload: UpdateUserPayload,
+): Promise<void> {
+  await apiFetch(`/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    token,
+    body: payload,
+  });
+}
+
 export interface UpdateUserRolePayload {
   roleId: string;
 }
@@ -324,7 +401,7 @@ export async function updateUserRole(
   payload: UpdateUserRolePayload,
 ): Promise<void> {
   await apiFetch(`/admin/users/${encodeURIComponent(userId)}/role`, {
-    method: 'PATCH',
+    method: 'PUT',
     token,
     body: payload,
   });
@@ -434,6 +511,18 @@ export interface BeneficiaryDto extends Record<string, unknown> {
   notes?: string | null;
   createdAt?: string;
   updatedAt?: string | null;
+  assignedTo?: string | null;
+  assignedToId?: string | null;
+  assignedToEmail?: string | null;
+  assignedAnalystId?: string | null;
+  assignedAnalystName?: string | null;
+  assignedAnalystEmail?: string | null;
+  assignedAnalyst?: Record<string, unknown> | null;
+  assignedSupervisorId?: string | null;
+  assignedSupervisorName?: string | null;
+  assignedSupervisor?: Record<string, unknown> | null;
+  assignmentDate?: string | null;
+  assignmentNotes?: string | null;
 }
 
 export interface PagedResult<T> {
@@ -523,11 +612,23 @@ export interface SearchBeneficiariesOptions {
   search?: string;
   pageNumber?: number;
   pageSize?: number;
+  assignedTo?: string;
+  onlyAssigned?: boolean;
+  supervisorId?: string;
+  includeAssignments?: boolean;
 }
 
 export async function searchBeneficiaries(
   token: string,
-  { search, pageNumber = 1, pageSize = 25 }: SearchBeneficiariesOptions = {},
+  {
+    search,
+    pageNumber = 1,
+    pageSize = 25,
+    assignedTo,
+    onlyAssigned,
+    supervisorId,
+    includeAssignments,
+  }: SearchBeneficiariesOptions = {},
 ): Promise<PagedResult<BeneficiaryDto>> {
   const params = new URLSearchParams();
   if (search && search.trim().length > 0) {
@@ -535,12 +636,41 @@ export async function searchBeneficiaries(
   }
   params.set('pageNumber', String(Math.max(1, pageNumber)));
   params.set('pageSize', String(Math.min(Math.max(1, pageSize), 200)));
+  if (assignedTo && assignedTo.trim().length > 0) {
+    params.set('assignedTo', assignedTo.trim());
+  }
+  if (typeof onlyAssigned === 'boolean') {
+    params.set('onlyAssigned', String(onlyAssigned));
+  }
+  if (supervisorId && supervisorId.trim().length > 0) {
+    params.set('supervisorId', supervisorId.trim());
+  }
+  if (typeof includeAssignments === 'boolean') {
+    params.set('includeAssignments', String(includeAssignments));
+  }
 
   const response = await apiFetch<unknown>(`/admin/beneficiaries?${params.toString()}`, {
     token,
   });
 
   return normalizePagedResult<BeneficiaryDto>(response);
+}
+
+export interface AssignBeneficiaryPayload {
+  analystId: string;
+  notes?: string;
+}
+
+export async function assignBeneficiaryToAnalyst(
+  token: string,
+  beneficiaryId: string,
+  payload: AssignBeneficiaryPayload,
+): Promise<void> {
+  await apiFetch(`/admin/beneficiaries/${encodeURIComponent(beneficiaryId)}/assign`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
 }
 
 export interface AuthProfile extends Record<string, unknown> {
@@ -666,6 +796,23 @@ export async function getRequests(
   return normalizeCollection<RequestDto>(response);
 }
 
+export interface AssignRequestPayload {
+  analystId: string;
+  notes?: string;
+}
+
+export async function assignRequest(
+  token: string,
+  requestId: string,
+  payload: AssignRequestPayload,
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/assign`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
 // Report DTOs matching backend
 export interface RequestCountReportDto extends Record<string, unknown> {
   totalRequests?: number;
@@ -747,4 +894,99 @@ export async function getActiveUsersReport(token: string): Promise<ActiveUsersRe
 
 export async function getUsersByRoleReport(token: string): Promise<UsersByRoleReportResponse> {
   return apiFetch<UsersByRoleReportResponse>('/reports/users/by-role', { token });
+}
+
+// Report download functions
+export async function downloadRequestCountReportPDF(token: string): Promise<Blob> {
+  return fetchReportBlob('/reports/requests/count/pdf', token, 'application/pdf');
+}
+
+export async function downloadRequestCountReportExcel(token: string): Promise<Blob> {
+  return fetchReportBlob(
+    '/reports/requests/count/excel',
+    token,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel',
+  );
+}
+
+export async function downloadMonthlyRequestReportPDF(
+  token: string,
+  year: number,
+  month: number,
+): Promise<Blob> {
+  return fetchReportBlob(
+    `/reports/requests/monthly/${year}/${month}/pdf`,
+    token,
+    'application/pdf',
+  );
+}
+
+export async function downloadMonthlyRequestReportExcel(
+  token: string,
+  year: number,
+  month: number,
+): Promise<Blob> {
+  return fetchReportBlob(
+    `/reports/requests/monthly/${year}/${month}/excel`,
+    token,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel',
+  );
+}
+
+export async function downloadAnnualRequestReportPDF(
+  token: string,
+  year: number,
+): Promise<Blob> {
+  return fetchReportBlob(
+    `/reports/requests/annual/${year}/pdf`,
+    token,
+    'application/pdf',
+  );
+}
+
+export async function downloadAnnualRequestReportExcel(
+  token: string,
+  year: number,
+): Promise<Blob> {
+  return fetchReportBlob(
+    `/reports/requests/annual/${year}/excel`,
+    token,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel',
+  );
+}
+
+export async function downloadActiveUsersReportPDF(token: string): Promise<Blob> {
+  return fetchReportBlob('/reports/users/active/pdf', token, 'application/pdf');
+}
+
+export async function downloadActiveUsersReportExcel(token: string): Promise<Blob> {
+  return fetchReportBlob(
+    '/reports/users/active/excel',
+    token,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel',
+  );
+}
+
+export async function downloadUsersByRoleReportPDF(token: string): Promise<Blob> {
+  return fetchReportBlob('/reports/users/by-role/pdf', token, 'application/pdf');
+}
+
+export async function downloadUsersByRoleReportExcel(token: string): Promise<Blob> {
+  return fetchReportBlob(
+    '/reports/users/by-role/excel',
+    token,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel',
+  );
+}
+
+// Helper function to download blob as file
+export function downloadBlobAsFile(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 }

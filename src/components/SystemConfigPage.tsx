@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -7,7 +7,16 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
 import { ApiError, AuditEventDto, AuditSummaryDto, getAuditEvents, getAuditSummary } from '../services/api';
-import { Shield, Activity, Eye, Search, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+  Shield,
+  Activity,
+  Eye,
+  Search,
+  RefreshCw,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
 interface CurrentUser {
   username: string;
@@ -85,6 +94,8 @@ const HOURS_FILTERS: Record<'24h' | '72h' | '168h', number> = {
   '72h': 72,
   '168h': 168,
 };
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 const toNumber = (value: unknown): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -187,6 +198,8 @@ export function SystemConfigPage({ authToken }: PageProps) {
   const [summary, setSummary] = useState<AuditSummaryDto | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   const loadAuditData = useCallback(async () => {
     if (!authToken) {
@@ -207,6 +220,7 @@ export function SystemConfigPage({ authToken }: PageProps) {
 
       setAuditEvents(events);
       setSummary(summaryResponse ?? null);
+      setCurrentPage(1);
     } catch (err) {
       console.error('Error cargando eventos de auditoría', err);
       let message = 'No se pudo obtener el registro de auditoría.';
@@ -287,6 +301,38 @@ export function SystemConfigPage({ authToken }: PageProps) {
       return true;
     });
   }, [sortedEvents, statusFilter, categoryFilter, normalizedSearch, hoursRangeMs, now]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, categoryFilter, dateFilter, normalizedSearch, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+
+  useEffect(() => {
+    setCurrentPage((previous) => {
+      if (previous > pageCount) {
+        return pageCount;
+      }
+      if (previous < 1) {
+        return 1;
+      }
+      return previous;
+    });
+  }, [pageCount]);
+
+  const paginatedLogs = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredLogs.slice(startIndex, startIndex + pageSize);
+  }, [filteredLogs, currentPage, pageSize]);
+
+  const startItem = filteredLogs.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem =
+    filteredLogs.length === 0 ? 0 : Math.min(filteredLogs.length, currentPage * pageSize);
+
+  const displayedRangeMessage =
+    filteredLogs.length === 0
+      ? 'Sin resultados para los filtros seleccionados.'
+      : `Mostrando ${startItem}-${endItem} de ${filteredLogs.length} eventos filtrados (total cargados: ${auditEvents.length}).`;
 
   const latestEventDate = useMemo(() => {
     const date = resolveAuditDate(sortedEvents[0] ?? {});
@@ -463,9 +509,7 @@ export function SystemConfigPage({ authToken }: PageProps) {
       <Card>
         <CardHeader>
           <CardTitle>Registro de auditoría</CardTitle>
-          <CardDescription>
-            {filteredLogs.length} evento{filteredLogs.length === 1 ? '' : 's'} mostrado{filteredLogs.length === 1 ? '' : 's'} de {auditEvents.length} recibidos.
-          </CardDescription>
+          <CardDescription>{displayedRangeMessage}</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -495,7 +539,7 @@ export function SystemConfigPage({ authToken }: PageProps) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredLogs.map((event) => {
+                  paginatedLogs.map((event) => {
                     const status = normalizeAuditStatus(event);
                     const category = normalizeAuditCategory(event);
                     const eventDate = formatDateTime(resolveAuditDate(event));
@@ -530,6 +574,67 @@ export function SystemConfigPage({ authToken }: PageProps) {
             </Table>
           </div>
         </CardContent>
+        <CardFooter className="flex flex-col gap-4 border-t sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-gray-600">
+            {filteredLogs.length === 0
+              ? '0 eventos encontrados.'
+              : `Eventos ${startItem}-${endItem} de ${filteredLogs.length} resultados filtrados.`}
+          </div>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Por página</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => {
+                  const parsed = Number.parseInt(value, 10);
+                  if (!Number.isNaN(parsed)) {
+                    setPageSize(parsed);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-9 w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={String(option)}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+                disabled={currentPage <= 1}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Anterior</span>
+              </Button>
+              <span className="text-sm text-gray-600">
+                Página {filteredLogs.length === 0 ? 0 : currentPage} de {filteredLogs.length === 0 ? 0 : pageCount}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((previous) => Math.min(pageCount, previous + 1))
+                }
+                disabled={currentPage >= pageCount || filteredLogs.length === 0}
+                className="gap-1"
+              >
+                <span className="hidden sm:inline">Siguiente</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardFooter>
       </Card>
     </div>
   );

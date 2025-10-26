@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -51,8 +51,7 @@ import {
 import { useIsMobile } from "./ui/use-mobile";
 import governmentLogo from "../assets/Logo-Siuben.png";
 import { ChangePasswordModal } from "./ChangePasswordModal";
-import { ApiError, getNotifications, markNotificationRead, NotificationDto } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { useNotifications, DashboardNotification, NotificationPriority } from "../context/NotificationsContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -152,103 +151,6 @@ const getNavigationItems = (permissions?: {
   });
 };
 
-type NotificationPriority = 'high' | 'medium' | 'low';
-
-interface DashboardNotification {
-  id: string;
-  title: string;
-  message: string;
-  createdAt: string;
-  read: boolean;
-  priority: NotificationPriority;
-  type: string;
-  raw: NotificationDto;
-}
-
-const normalizeString = (value: unknown): string | undefined => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed.length > 0) {
-      return trimmed;
-    }
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  return undefined;
-};
-
-const mapNotificationDtoToDashboard = (
-  notification: NotificationDto,
-  index: number,
-): DashboardNotification => {
-  const id =
-    normalizeString(notification.id) ??
-    normalizeString((notification as Record<string, unknown>).notificationId) ??
-    normalizeString((notification as Record<string, unknown>).uuid) ??
-    `notification-${index}`;
-
-  const title =
-    normalizeString(notification.title) ??
-    normalizeString((notification as Record<string, unknown>).subject) ??
-    'Notificación del sistema';
-
-  const message =
-    normalizeString(notification.message) ??
-    normalizeString(notification.content) ??
-    normalizeString(notification.body) ??
-    normalizeString((notification as Record<string, unknown>).description) ??
-    title;
-
-  const createdAt =
-    normalizeString(notification.createdAt) ??
-    normalizeString(notification.timestamp) ??
-    normalizeString((notification as Record<string, unknown>).date) ??
-    new Date().toISOString();
-
-  const read =
-    Boolean(notification.isRead ?? notification.read) ||
-    (typeof notification.status === 'string' &&
-      notification.status.toLowerCase().includes('read'));
-
-  const prioritySource =
-    normalizeString(notification.priority) ??
-    normalizeString((notification as Record<string, unknown>).severity) ??
-    normalizeString((notification as Record<string, unknown>).importance) ??
-    '';
-
-  let priority: NotificationPriority = 'medium';
-  const priorityValue = prioritySource?.toLowerCase();
-  if (priorityValue) {
-    if (
-      ['high', 'alta', 'urgent', 'urgente', 'critical', 'crítico', 'critico'].includes(
-        priorityValue,
-      )
-    ) {
-      priority = 'high';
-    } else if (['low', 'baja', 'informativo', 'info'].includes(priorityValue)) {
-      priority = 'low';
-    }
-  }
-
-  const type =
-    (normalizeString(notification.type) ??
-      normalizeString((notification as Record<string, unknown>).category) ??
-      normalizeString((notification as Record<string, unknown>).source) ??
-      (priority === 'high' ? 'alert' : 'general'))!.toLowerCase();
-
-  return {
-    id,
-    title,
-    message,
-    createdAt,
-    read,
-    priority,
-    type,
-    raw: notification,
-  };
-};
-
 const notificationPriorityStyles: Record<
   NotificationPriority,
   { color: string; bg: string }
@@ -262,6 +164,8 @@ const notificationTypeIcons: Record<string, React.ComponentType<{ className?: st
   alert: AlertCircle,
   system: Info,
   request: ClipboardList,
+  'request-assignment': UserPlus,
+  assignment: UserPlus,
   approval: CheckCircle,
   general: Bell,
 };
@@ -293,46 +197,20 @@ export function DashboardLayout({
   onValidateCurrentPassword,
   authToken,
 }: DashboardLayoutProps) {
-  const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-  const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const canChangePassword = Boolean(onPasswordChange && currentUser);
 
-  const loadNotifications = useCallback(
-    async (showErrorToast = false) => {
-      if (!authToken) {
-        setNotifications([]);
-        setNotificationsError(null);
-        return;
-      }
-
-      setIsLoadingNotifications(true);
-      try {
-        const data = await getNotifications(authToken, { includeRead: true, take: 50 });
-        setNotifications(data.map(mapNotificationDtoToDashboard));
-        setNotificationsError(null);
-      } catch (error) {
-        const message =
-          error instanceof ApiError
-            ? error.message
-            : 'No se pudieron cargar las notificaciones.';
-        setNotificationsError(message);
-        if (showErrorToast) {
-          toast.error(message);
-        }
-      } finally {
-        setIsLoadingNotifications(false);
-      }
-    },
-    [authToken],
-  );
-
-  useEffect(() => {
-    loadNotifications(false);
-  }, [loadNotifications]);
+  const {
+    notifications,
+    unreadCount,
+    isLoading: isLoadingNotifications,
+    error: notificationsError,
+    refresh: refreshNotifications,
+    markAsRead: markNotificationAsRead,
+    markAllAsRead: markAllNotificationsAsRead,
+  } = useNotifications();
 
   const openChangePasswordModal = () => {
     if (canChangePassword) {
@@ -340,63 +218,14 @@ export function DashboardLayout({
     }
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
   const handleToggleNotifications = () => {
     setShowNotifications((prev) => {
       const next = !prev;
       if (next) {
-        void loadNotifications(true);
+        void refreshNotifications(true);
       }
       return next;
     });
-  };
-
-  const markAsRead = async (id: string) => {
-    let hasChanged = false;
-    setNotifications((prev) =>
-      prev.map((n) => {
-        if (n.id === id && !n.read) {
-          hasChanged = true;
-          return { ...n, read: true };
-        }
-        return n;
-      }),
-    );
-
-    if (!hasChanged || !authToken) {
-      return;
-    }
-
-    try {
-      await markNotificationRead(authToken, id);
-    } catch (error) {
-      toast.error('No se pudo marcar la notificación como leída. Intente nuevamente.');
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: false } : n)),
-      );
-    }
-  };
-
-  const markAllAsRead = async () => {
-    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
-    if (unreadIds.length === 0) {
-      return;
-    }
-
-    const previousState = notifications;
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-
-    if (!authToken) {
-      return;
-    }
-
-    try {
-      await Promise.all(unreadIds.map((id) => markNotificationRead(authToken, id)));
-    } catch (error) {
-      toast.error('No se pudieron marcar todas las notificaciones como leídas.');
-      setNotifications(previousState.map((n) => ({ ...n })));
-    }
   };
 
   const getRelativeTime = (timestamp?: string) => {
@@ -736,7 +565,7 @@ export function DashboardLayout({
                               {unreadCount > 0 && (
                                 <button
                                   onClick={() => {
-                                    void markAllAsRead();
+                              void markAllNotificationsAsRead();
                                   }}
                                   disabled={isLoadingNotifications}
                                   className="text-xs text-dr-blue hover:bg-blue-50 font-arial-rounded px-2 py-1 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
@@ -783,7 +612,7 @@ export function DashboardLayout({
                                       }
                                     `}
                                     onClick={() => {
-                                      void markAsRead(notification.id);
+                                      void markNotificationAsRead(notification.id);
                                     }}
                                   >
                                     <div className="flex items-start gap-3">
