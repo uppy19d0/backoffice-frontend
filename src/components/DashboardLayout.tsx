@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -87,6 +87,7 @@ interface DashboardLayoutProps {
   }) => Promise<{ success: boolean; error?: string }>;
   onValidateCurrentPassword?: (username: string, currentPassword: string) => Promise<boolean>;
   authToken?: string | null;
+  forcePasswordChange?: boolean;
 }
 
 const getNavigationItems = (permissions?: {
@@ -124,6 +125,13 @@ const getNavigationItems = (permissions?: {
       icon: ClipboardList, 
       permission: "canReviewRequests",
       description: "Revisión de solicitudes"
+    },
+    { 
+      id: "notifications", 
+      label: "Notificaciones", 
+      icon: Bell, 
+      permission: null,
+      description: "Historial de alertas y avisos"
     },
     { 
       id: "reports", 
@@ -206,6 +214,7 @@ export function DashboardLayout({
   onPasswordChange,
   onValidateCurrentPassword,
   authToken,
+  forcePasswordChange = false,
 }: DashboardLayoutProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -227,6 +236,12 @@ export function DashboardLayout({
       setShowChangePasswordModal(true);
     }
   };
+
+  useEffect(() => {
+    if (forcePasswordChange && canChangePassword) {
+      setShowChangePasswordModal(true);
+    }
+  }, [forcePasswordChange, canChangePassword]);
 
   const handleToggleNotifications = () => {
     setShowNotifications((prev) => {
@@ -419,6 +434,15 @@ export function DashboardLayout({
                           <span className="relative z-10 group-data-[collapsible=icon]:sr-only">
                             {item.label}
                           </span>
+                          
+                          {item.id === "notifications" && unreadCount > 0 && (
+                            <span
+                              className="absolute right-3 top-2 z-10 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-dr-red px-1 text-xs font-bold text-white shadow-sm group-data-[collapsible=icon]:right-1.5 group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:min-w-[16px]"
+                              aria-label={`${unreadCount} notificaciones sin leer`}
+                            >
+                              {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                          )}
                           
                           {/* Indicador de página activa mejorado */}
                           {isActive && (
@@ -675,7 +699,11 @@ export function DashboardLayout({
                         <div className="p-3 border-t border-gray-100 bg-gray-50/50">
                           <button
                             className="w-full text-dr-blue hover:bg-blue-50 font-semibold py-2 px-4 rounded transition-colors"
-                            onClick={() => setShowNotifications(false)}
+                            onClick={() => {
+                              setShowNotifications(false);
+                              void refreshNotifications({ showErrors: true });
+                              onPageChange('notifications');
+                            }}
                           >
                             Ver todas las notificaciones
                           </button>
@@ -780,6 +808,7 @@ export function DashboardLayout({
           currentUser={currentUser}
           onPasswordChange={onPasswordChange}
           onValidateCurrentPassword={onValidateCurrentPassword}
+          forceChange={forcePasswordChange}
         />
       )}
     </SidebarProvider>

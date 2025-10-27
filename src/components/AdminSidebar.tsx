@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
   Users,
@@ -13,16 +13,16 @@ import {
   Calendar
 } from 'lucide-react';
 
-// Tokens de diseño específicos
+// Tokens de diseño específicos usando colores oficiales SIUBEN
 const tokens = {
-  // Colores
-  navBg: '#0B1F36',
+  // Colores oficiales República Dominicana/SIUBEN
+  navBg: '#002A56', // dr-blue-dark
   navItemText: '#E6EDF6',
   navItemTextMuted: '#9FB0C6',
-  navItemActiveBg: '#14365C', // tema oscuro
-  navItemActiveText: '#E6EDF6',
-  navItemHoverBg: '#0F2A4A',
-  focusRing: '#7DB3FF',
+  navItemActiveBg: '#003876', // dr-blue oficial
+  navItemActiveText: '#FFFFFF',
+  navItemHoverBg: '#1E5A96', // dr-blue-light
+  focusRing: '#003876', // dr-blue oficial
   
   // Dimensiones
   widthExpanded: 264,

@@ -302,6 +302,10 @@ export interface AdminUserDto extends Record<string, unknown> {
   jobTitle?: string;
   role?: string;
   roleId?: string;
+  supervisorId?: string | null;
+  supervisorName?: string | null;
+  managerId?: string | null;
+  managerName?: string | null;
   status?: number | string;
   departmentId?: string | null;
   departmentName?: string | null;
@@ -309,6 +313,8 @@ export interface AdminUserDto extends Record<string, unknown> {
   provinceName?: string | null;
   createdAt?: string;
   createdDate?: string;
+  lastAccessAt?: string;
+  LastAccessAt?: string;
   lastLoginAt?: string;
   lastLogin?: string;
 }
@@ -359,6 +365,7 @@ export interface CreateUserPayload extends Record<string, unknown> {
   provinceId?: string | null;
   status: number;
   tempPassword: string;
+  supervisorId?: string | null;
 }
 
 export async function createUser(token: string, payload: CreateUserPayload): Promise<void> {
@@ -684,6 +691,12 @@ export interface AuthProfile extends Record<string, unknown> {
   provinceId?: string | null;
   provinceName?: string | null;
   role?: string;
+  mustChangePassword?: boolean;
+  requirePasswordChange?: boolean;
+  passwordChangeRequired?: boolean;
+  needsPasswordChange?: boolean;
+  isFirstLogin?: boolean;
+  temporaryPassword?: boolean;
 }
 
 export async function getCurrentUser(token: string): Promise<AuthProfile> {

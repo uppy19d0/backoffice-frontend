@@ -169,6 +169,32 @@ const STATUS_ROLE_HINTS: Array<{ tokens: string[]; label: string }> = [
   { tokens: ['admin', 'administrador', 'administrator'], label: 'Administrador' },
 ];
 
+const SUPERVISOR_ROLE_KEYWORDS = [
+  'supervisor',
+  'supervisora',
+  'manager',
+  'coordinador',
+  'coordinator',
+  'gerente',
+  'director',
+  'jefe',
+  'encargado',
+  'encargada',
+];
+
+const SUPERVISOR_REQUIRED_ROLE_KEYWORDS = ['analista', 'analist', 'analyst', 'gestor', 'gestora'];
+
+const normalizeMatchString = (value?: string | null): string => {
+  if (!value) {
+    return '';
+  }
+
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+};
+
 const detectRoleHint = (normalized: string): string | null => {
   for (const { tokens, label } of STATUS_ROLE_HINTS) {
     if (tokens.some((token) => normalized.includes(token))) {
@@ -383,6 +409,7 @@ const INITIAL_FORM_STATE = {
   fullName: '',
   jobTitle: '',
   role: '',
+  supervisorId: UNASSIGNED_VALUE,
   departmentId: UNASSIGNED_VALUE,
   provinceId: UNASSIGNED_VALUE,
   status: '1',
@@ -517,6 +544,64 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
     [provinces],
   );
 
+  const supervisorOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const candidates: Array<{ value: string; label: string; isPreferred: boolean }> = [];
+
+    for (const user of users) {
+      const identifier = resolveUserIdentifier(user);
+      if (!identifier || seen.has(identifier)) {
+        continue;
+      }
+
+      const name = resolveString(user, ['fullName', 'name'], '').trim();
+      const email = resolveString(user, ['email', 'userName', 'username'], '').trim();
+      const role = resolveString(user, ['role', 'roleName', 'roleDescription'], '').trim();
+      const jobTitle = resolveString(user, ['jobTitle'], '').trim();
+
+      const primary = name || email || identifier;
+      const descriptor = role || jobTitle || '';
+      const label = descriptor ? `${primary} — ${descriptor}` : primary;
+
+      const normalizedDescriptor = normalizeMatchString(`${descriptor} ${primary}`);
+      const isPreferred = SUPERVISOR_ROLE_KEYWORDS.some((keyword) =>
+        normalizedDescriptor.includes(keyword),
+      );
+
+      candidates.push({ value: identifier, label, isPreferred });
+      seen.add(identifier);
+    }
+
+    candidates.sort((a, b) => {
+      if (a.isPreferred !== b.isPreferred) {
+        return a.isPreferred ? -1 : 1;
+      }
+      return a.label.localeCompare(b.label, 'es', { sensitivity: 'base' });
+    });
+
+    return candidates.map(({ value, label }) => ({ value, label }));
+  }, [users]);
+
+  const roleRequiresSupervisor = useCallback(
+    (roleValue: string): boolean => {
+      if (!roleValue) {
+        return false;
+      }
+
+      const option = roleOptions.find((role) => role.value === roleValue);
+      const searchText = `${option?.label ?? ''} ${roleValue}`;
+      const normalized = normalizeMatchString(searchText);
+
+      return SUPERVISOR_REQUIRED_ROLE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    },
+    [roleOptions],
+  );
+
+  const requiresSupervisor = useMemo(
+    () => (newUser.role ? roleRequiresSupervisor(newUser.role) : false),
+    [newUser.role, roleRequiresSupervisor],
+  );
+
   const referencesReady =
     roleOptions.length > 0 ||
     departmentOptions.length > 0 ||
@@ -605,9 +690,15 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
 
   useEffect(() => {
     if (!newUser.role && roleOptions.length > 0) {
-      setNewUser((prev) => ({ ...prev, role: roleOptions[0].value }));
+      setNewUser((prev) => ({
+        ...prev,
+        role: roleOptions[0].value,
+        supervisorId: roleRequiresSupervisor(roleOptions[0].value)
+          ? prev.supervisorId
+          : UNASSIGNED_VALUE,
+      }));
     }
-  }, [roleOptions, newUser.role]);
+  }, [roleOptions, newUser.role, roleRequiresSupervisor]);
 
   const handleDialogOpenChange = (open: boolean) => {
     if (open) {
@@ -642,6 +733,20 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       return;
     }
 
+    const supervisorIdValue =
+      !newUser.supervisorId || newUser.supervisorId === UNASSIGNED_VALUE
+        ? null
+        : newUser.supervisorId;
+
+    if (requiresSupervisor && !supervisorIdValue) {
+      setCreateError(
+        supervisorOptions.length === 0
+          ? 'No hay supervisores disponibles. Actualice la lista de usuarios o cree un supervisor antes de continuar.'
+          : 'Seleccione el supervisor responsable para este usuario.',
+      );
+      return;
+    }
+
     setIsCreating(true);
     setCreateError(null);
     setCreateServersideError(null);
@@ -665,6 +770,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
         provinceId: provinceIdValue,
         status: Number.parseInt(newUser.status, 10),
         tempPassword: newUser.tempPassword,
+        supervisorId: supervisorIdValue,
       });
 
       toast.success('Usuario creado exitosamente.');
@@ -1281,7 +1387,13 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                         <Select
                           value={newUser.role}
                           onValueChange={(value) =>
-                            setNewUser((prev) => ({ ...prev, role: value }))
+                            setNewUser((prev) => ({
+                              ...prev,
+                              role: value,
+                              supervisorId: roleRequiresSupervisor(value)
+                                ? prev.supervisorId
+                                : UNASSIGNED_VALUE,
+                            }))
                           }
                         >
                           <SelectTrigger>
@@ -1299,12 +1411,58 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                         <Input
                           placeholder="Rol (ej. Admin, Analyst)"
                           value={newUser.role}
-                          onChange={(event) =>
-                            setNewUser((prev) => ({ ...prev, role: event.target.value }))
-                          }
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setNewUser((prev) => ({
+                              ...prev,
+                              role: value,
+                              supervisorId: roleRequiresSupervisor(value)
+                                ? prev.supervisorId
+                                : UNASSIGNED_VALUE,
+                            }));
+                          }}
                           required
                         />
                       )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        Supervisor responsable
+                        {requiresSupervisor ? (
+                          <span className="ml-1 text-red-600">*</span>
+                        ) : null}
+                      </Label>
+                      {supervisorOptions.length > 0 ? (
+                        <Select
+                          value={newUser.supervisorId}
+                          onValueChange={(value) =>
+                            setNewUser((prev) => ({ ...prev, supervisorId: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione un supervisor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNASSIGNED_VALUE}>Sin supervisor asignado</SelectItem>
+                            {supervisorOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600">
+                          {isLoadingUsers
+                            ? 'Cargando supervisores disponibles...'
+                            : 'No se encontraron supervisores activos. Actualice la lista o cree un supervisor primero.'}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        {requiresSupervisor
+                          ? 'Seleccione el supervisor responsable para este usuario.'
+                          : 'Opcional. Puede asignarlo más adelante si es necesario.'}
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label>Departamento</Label>
@@ -1503,7 +1661,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                     const province = resolveString(user, ['provinceName', 'province', 'provinceTitle']);
                     const statusInfo = resolveStatusDescriptor(user.status);
                     const createdAt = resolveString(user, ['createdAt', 'createdDate'], '');
-                    const lastLogin = resolveString(user, ['lastLoginAt', 'lastLogin'], '');
+                    const lastAccess = resolveString(user, ['lastAccessAt', 'LastAccessAt', 'lastLoginAt', 'lastLogin'], '');
                     const identifier = resolveUserIdentifier(user);
                     const isActive = isActiveStatus(user.status);
                     const statusAction: StatusAction = isActive ? 'disable' : 'enable';
@@ -1557,7 +1715,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                           {formatDateTime(createdAt)}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell text-sm text-gray-600">
-                          {formatDateTime(lastLogin)}
+                          {formatDateTime(lastAccess)}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
@@ -1761,7 +1919,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
               <div>
                 <p className="text-xs uppercase text-gray-500">Último acceso</p>
                 <p className="text-sm text-gray-700">
-                  {formatDateTime(resolveString(viewDialogUser, ['lastLoginAt', 'lastLogin'], ''))}
+                  {formatDateTime(resolveString(viewDialogUser, ['lastAccessAt', 'LastAccessAt', 'lastLoginAt', 'lastLogin'], ''))}
                 </p>
               </div>
             </div>

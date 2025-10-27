@@ -8,6 +8,7 @@ import {
   DashboardOverview,
   BeneficiariesPage,
   RequestsPage,
+  NotificationsPage,
   ReportsPage,
 } from './components/DashboardPages';
 import { UsersManagementPage } from './components/UsersManagementPage';
@@ -47,6 +48,7 @@ interface User {
   provinceId?: string | null;
   provinceName?: string | null;
   profile?: AuthProfile | null;
+  mustChangePassword?: boolean;
 }
 
 const STATUS_FIELD_CANDIDATES = ['status', 'accountStatus', 'state', 'userStatus', 'currentStatus'];
@@ -259,6 +261,191 @@ const locateUserObject = (raw: Record<string, unknown>): Record<string, unknown>
   return null;
 };
 
+const PASSWORD_CHANGE_FLAG_MATCHERS = [
+  'mustchangepassword',
+  'shouldchangepassword',
+  'requirepasswordchange',
+  'requirechangepassword',
+  'passwordchangerequired',
+  'passwordmustchange',
+  'forcechangepassword',
+  'forcepasswordchange',
+  'forcepasswordreset',
+  'needspasswordchange',
+  'needspasswordreset',
+  'shouldresetpassword',
+  'mustresetpassword',
+  'passwordresetrequired',
+  'passwordresetneeded',
+  'needpasswordreset',
+  'requirepasswordreset',
+  'requirespasswordreset',
+  'changepasswordonlogin',
+  'mustchangepasswordonlogin',
+  'mustupdatepassword',
+  'shouldupdatepassword',
+  'needspasswordupdate',
+  'temporarypassword',
+  'temppassword',
+  'istemporarypassword',
+  'isfirstlogin',
+  'firstlogin',
+  'hasdefaultpassword',
+  'defaultpassword',
+  'passwordexpired',
+  'ispasswordexpired',
+  'passwordisexpired',
+  'expiredpassword',
+  'passwordexpiredflag',
+  'enforcepasswordchange',
+  'passwordchangeenforced',
+];
+
+const PASSWORD_CHANGE_FLAG_SET = new Set(PASSWORD_CHANGE_FLAG_MATCHERS);
+
+const BOOLEAN_TRUE_VALUES = new Set([
+  'true',
+  '1',
+  'yes',
+  'y',
+  'si',
+  'sí',
+  's',
+  'required',
+  'force',
+  'forced',
+  'pending',
+  'obligatorio',
+  'obligatoria',
+  'obligatory',
+  'expirado',
+  'expirada',
+  'expired',
+  'temporal',
+  'temporaria',
+  'temporary',
+  'vencido',
+  'vencida',
+]);
+
+const BOOLEAN_FALSE_VALUES = new Set([
+  'false',
+  '0',
+  'no',
+  'n',
+  'none',
+  'notrequired',
+  'completed',
+  'complete',
+  'ok',
+  'valid',
+  'activo',
+  'activa',
+  'active',
+]);
+
+const parseBooleanLike = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+    return value > 0 ? true : undefined;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return undefined;
+    }
+    if (BOOLEAN_TRUE_VALUES.has(normalized)) {
+      return true;
+    }
+    if (BOOLEAN_FALSE_VALUES.has(normalized)) {
+      return false;
+    }
+  }
+  return undefined;
+};
+
+const searchForPasswordChangeFlag = (
+  source: unknown,
+  visited: WeakSet<object> = new WeakSet(),
+): boolean | undefined => {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+
+  if (visited.has(source as object)) {
+    return undefined;
+  }
+  visited.add(source as object);
+
+  const record = source as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries(record)) {
+    const normalizedKey = key.trim().toLowerCase();
+    let matched = false;
+    if (PASSWORD_CHANGE_FLAG_SET.has(normalizedKey)) {
+      matched = true;
+    } else {
+      matched = PASSWORD_CHANGE_FLAG_MATCHERS.some((candidate) => normalizedKey.includes(candidate));
+    }
+
+    if (matched) {
+      const parsed = parseBooleanLike(value);
+      if (parsed !== undefined) {
+        return parsed;
+      }
+
+      if (typeof value === 'string') {
+        const normalizedValue = value.trim().toLowerCase();
+        if (normalizedValue === 'temporal' || normalizedValue === 'temporary') {
+          return true;
+        }
+      }
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = searchForPasswordChangeFlag(item, visited);
+        if (nested !== undefined) {
+          return nested;
+        }
+      }
+    } else if (value && typeof value === 'object') {
+      const nested = searchForPasswordChangeFlag(value, visited);
+      if (nested !== undefined) {
+        return nested;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const resolvePasswordChangeRequirement = (
+  ...sources: Array<Record<string, unknown> | null | undefined>
+): boolean | undefined => {
+  for (const source of sources) {
+    if (!source) {
+      continue;
+    }
+    const flag = searchForPasswordChangeFlag(source);
+    if (flag !== undefined) {
+      return flag;
+    }
+  }
+  return undefined;
+};
+
 const determineRoleLevel = (role: string): RoleLevel => {
   if (!role) {
     return 'administrador';
@@ -407,6 +594,13 @@ const buildUserFromSources = ({
     profile?.provinceName ??
     pickFirstString(rawProfile, ['provinceName', 'province'], 'province');
 
+  const mustChangePassword =
+    resolvePasswordChangeRequirement(
+      profileRecord,
+      rawProfile,
+      loginResult?.raw ?? null,
+    ) ?? false;
+
   return {
     username,
     email,
@@ -424,6 +618,7 @@ const buildUserFromSources = ({
     provinceId: profile?.provinceId ?? pickFirstString(rawProfile, ['provinceId'], 'province'),
     provinceName,
     profile: profile ?? null,
+    mustChangePassword,
   };
 };
 
@@ -431,6 +626,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -449,12 +645,14 @@ function App() {
 
     const storedSession = readSession();
     if (!storedSession) {
+      setMustChangePassword(false);
       setSessionChecked(true);
       return;
     }
 
     if (!isTokenValid(storedSession.token)) {
       clearSession();
+      setMustChangePassword(false);
       setSessionChecked(true);
       return;
     }
@@ -463,12 +661,14 @@ function App() {
     if (isSuspendedStatus(storedStatus)) {
       clearSession();
       setLoginError('Su cuenta está suspendida. Comuníquese con el administrador del sistema.');
+      setMustChangePassword(false);
       setSessionChecked(true);
       return;
     }
 
     setAuthToken(storedSession.token);
     setCurrentUser(storedSession.user);
+    setMustChangePassword(Boolean(storedSession.user.mustChangePassword));
     setIsAuthenticated(true);
     setCurrentPage('dashboard');
     setLoginError('');
@@ -490,9 +690,11 @@ function App() {
           setAuthToken(null);
           setCurrentPage('dashboard');
           setLoginError('Su cuenta está suspendida. Comuníquese con el administrador del sistema.');
+          setMustChangePassword(false);
           return;
         }
         setCurrentUser(updatedUser);
+        setMustChangePassword(Boolean(updatedUser.mustChangePassword));
         persistSession({
           token: storedSession.token,
           user: updatedUser,
@@ -507,6 +709,7 @@ function App() {
   const handleLogin = async (email: string, password: string) => {
     setIsLoggingIn(true);
     setLoginError('');
+    setMustChangePassword(false);
 
     try {
       const result = await loginRequest(email, password);
@@ -525,11 +728,13 @@ function App() {
       const statusValue = resolveUserStatus(user);
       if (isSuspendedStatus(statusValue)) {
         setLoginError('Su cuenta está suspendida. Comuníquese con el administrador del sistema.');
+        setMustChangePassword(false);
         return;
       }
 
       setAuthToken(result.token);
       setCurrentUser(user);
+      setMustChangePassword(Boolean(user.mustChangePassword));
       setIsAuthenticated(true);
       setCurrentPage('dashboard');
       persistSession({
@@ -569,6 +774,7 @@ function App() {
     setAuthToken(null);
     setCurrentPage('dashboard');
     setLoginError('');
+    setMustChangePassword(false);
     clearSession();
   };
 
@@ -590,6 +796,24 @@ function App() {
 
     try {
       await updateOwnPassword(authToken, { currentPassword, newPassword });
+      let updatedUser: User | null = null;
+      setCurrentUser((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const nextUser = { ...prev, mustChangePassword: false };
+        updatedUser = nextUser;
+        return nextUser;
+      });
+      setMustChangePassword(false);
+      const sessionUser = updatedUser ?? (currentUser ? { ...currentUser, mustChangePassword: false } : null);
+      if (authToken && sessionUser) {
+        persistSession({
+          token: authToken,
+          user: sessionUser,
+          storedAt: Date.now(),
+        });
+      }
       return { success: true };
     } catch (error) {
       console.error('Error actualizando contraseña del usuario', error);
@@ -683,6 +907,13 @@ function App() {
             onNavigate={setCurrentPage}
           />
         );
+      case 'notifications':
+        return (
+          <NotificationsPage
+            currentUser={currentUser}
+            authToken={authToken}
+          />
+        );
       case 'reports':
         return (
           <ReportsPage
@@ -724,6 +955,7 @@ function App() {
             currentUser={currentUser}
             authToken={authToken}
             onPasswordChange={handlePasswordChange}
+            forcePasswordChange={mustChangePassword}
           >
             {renderCurrentPage()}
           </DashboardLayout>

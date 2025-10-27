@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -12,8 +12,10 @@ import {
   Key, 
   Save,
   Shield,
-  CheckCircle
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
+import { cn } from './ui/utils';
 
 interface CurrentUser {
   username: string;
@@ -39,6 +41,7 @@ interface ChangePasswordModalProps {
     newPassword: string;
   }) => Promise<{ success: boolean; error?: string }>;
   onValidateCurrentPassword?: (username: string, currentPassword: string) => Promise<boolean>;
+  forceChange?: boolean;
 }
 
 export function ChangePasswordModal({ 
@@ -46,7 +49,8 @@ export function ChangePasswordModal({
   onClose, 
   currentUser, 
   onPasswordChange,
-  onValidateCurrentPassword 
+  onValidateCurrentPassword,
+  forceChange = false,
 }: ChangePasswordModalProps) {
   const [formData, setFormData] = useState({
     currentPassword: '',
@@ -60,6 +64,7 @@ export function ChangePasswordModal({
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
   // Resetear el formulario cuando se abre/cierra el modal
   React.useEffect(() => {
@@ -70,33 +75,34 @@ export function ChangePasswordModal({
         confirmPassword: ''
       });
       setErrors([]);
+      setHasAttemptedSubmit(false);
     }
   }, [isOpen]);
 
-  const validateForm = (): string[] => {
+  const validateForm = (data = formData): string[] => {
     const validationErrors: string[] = [];
 
     // Validar contraseña actual
-    if (!formData.currentPassword.trim()) {
+    if (!data.currentPassword.trim()) {
       validationErrors.push('La contraseña actual es requerida');
     }
 
     // Validar nueva contraseña
-    if (!formData.newPassword.trim()) {
+    if (!data.newPassword.trim()) {
       validationErrors.push('La nueva contraseña es requerida');
     } else {
-      if (formData.newPassword.length < 6) {
+      if (data.newPassword.length < 6) {
         validationErrors.push('La nueva contraseña debe tener al menos 6 caracteres');
       }
-      if (formData.newPassword === formData.currentPassword) {
+      if (data.newPassword === data.currentPassword) {
         validationErrors.push('La nueva contraseña debe ser diferente a la actual');
       }
     }
 
     // Validar confirmación
-    if (!formData.confirmPassword.trim()) {
+    if (!data.confirmPassword.trim()) {
       validationErrors.push('La confirmación de contraseña es requerida');
-    } else if (formData.newPassword !== formData.confirmPassword) {
+    } else if (data.newPassword !== data.confirmPassword) {
       validationErrors.push('Las contraseñas no coinciden');
     }
 
@@ -104,8 +110,8 @@ export function ChangePasswordModal({
   };
 
   const handleSubmit = async () => {
-    setErrors([]);
-    
+    setHasAttemptedSubmit(true);
+
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
@@ -113,6 +119,7 @@ export function ChangePasswordModal({
     }
 
     setIsLoading(true);
+    setErrors([]);
 
     try {
       // Verificar contraseña actual primero (simulando validación)
@@ -136,6 +143,8 @@ export function ChangePasswordModal({
 
       if (result.success) {
         toast.success('Contraseña actualizada exitosamente');
+        setHasAttemptedSubmit(false);
+        setErrors([]);
         onClose();
       } else {
         setErrors([result.error ?? 'Error al actualizar la contraseña. Inténtelo nuevamente.']);
@@ -154,6 +163,32 @@ export function ChangePasswordModal({
     }));
   };
 
+  const handleFieldChange = (
+    field: 'currentPassword' | 'newPassword' | 'confirmPassword',
+  ) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  React.useEffect(() => {
+    if (!hasAttemptedSubmit) {
+      return;
+    }
+    const nextErrors = validateForm();
+    setErrors((prevErrors) => {
+      if (
+        prevErrors.length === nextErrors.length &&
+        prevErrors.every((error, index) => error === nextErrors[index])
+      ) {
+        return prevErrors;
+      }
+      return nextErrors;
+    });
+  }, [formData, hasAttemptedSubmit]);
+
   const getPasswordStrength = (password: string) => {
     if (password.length === 0) return { strength: 0, label: '', color: '' };
     if (password.length < 6) return { strength: 1, label: 'Débil', color: 'text-red-600' };
@@ -166,20 +201,55 @@ export function ChangePasswordModal({
 
   const passwordStrength = getPasswordStrength(formData.newPassword);
 
+  const handleDialogOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        if (!forceChange) {
+          onClose();
+        }
+        return;
+      }
+    },
+    [forceChange, onClose],
+  );
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
+    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
+      <DialogContent
+        className={cn(
+          'w-[min(100vw-1.5rem,420px)] max-w-lg p-0 overflow-hidden rounded-xl',
+          'flex flex-col max-h-[90vh]',
+          'sm:w-full',
+        )}
+      >
+        <DialogHeader className="space-y-1.5 px-4 pt-4 pb-3 sm:px-6 sm:pt-6 sm:pb-4 flex-shrink-0">
+          <DialogTitle className="text-dr-dark-gray flex items-center gap-2 text-lg sm:text-xl">
             <Key className="h-5 w-5 text-dr-blue" />
             Cambiar Contraseña
           </DialogTitle>
-          <DialogDescription>
-            Actualice su contraseña personal para <strong>{currentUser.name}</strong>
+          <DialogDescription className="text-sm text-gray-600 sm:text-base">
+            {forceChange ? (
+              <>
+                Por seguridad, debes actualizar tu contraseña personal antes de continuar.
+              </>
+            ) : (
+              <>
+                Actualice su contraseña personal para <strong>{currentUser.name}</strong>
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6 overflow-y-auto flex-1">
+          {forceChange && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-700">
+                Has iniciado sesión con una contraseña temporal. Debes crear una nueva contraseña para acceder al sistema.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Información del Usuario */}
           <div className="p-3 bg-blue-50 rounded-lg border-l-4 border-dr-blue">
             <div className="text-sm">
@@ -210,7 +280,7 @@ export function ChangePasswordModal({
                 id="currentPassword"
                 type={showPasswords.current ? "text" : "password"}
                 value={formData.currentPassword}
-                onChange={(e) => setFormData({...formData, currentPassword: e.target.value})}
+                onChange={handleFieldChange('currentPassword')}
                 placeholder="Ingrese su contraseña actual"
                 className="pr-10"
               />
@@ -238,7 +308,7 @@ export function ChangePasswordModal({
                 id="newPassword"
                 type={showPasswords.new ? "text" : "password"}
                 value={formData.newPassword}
-                onChange={(e) => setFormData({...formData, newPassword: e.target.value})}
+                onChange={handleFieldChange('newPassword')}
                 placeholder="Ingrese su nueva contraseña"
                 className="pr-10"
               />
@@ -300,7 +370,7 @@ export function ChangePasswordModal({
                 id="confirmPassword"
                 type={showPasswords.confirm ? "text" : "password"}
                 value={formData.confirmPassword}
-                onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                onChange={handleFieldChange('confirmPassword')}
                 placeholder="Confirme su nueva contraseña"
                 className="pr-10"
               />
@@ -348,14 +418,16 @@ export function ChangePasswordModal({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button 
-            variant="outline" 
-            onClick={onClose}
-            disabled={isLoading}
-          >
-            Cancelar
-          </Button>
+        <DialogFooter className="flex flex-col gap-2 border-t border-gray-100 bg-white px-4 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:px-6 flex-shrink-0">
+          {!forceChange && (
+            <Button 
+              variant="outline" 
+              onClick={onClose}
+              disabled={isLoading}
+            >
+              Cancelar
+            </Button>
+          )}
           <Button 
             onClick={handleSubmit}
             disabled={isLoading || errors.length > 0}
