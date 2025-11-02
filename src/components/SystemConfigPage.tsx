@@ -65,11 +65,14 @@ const CATEGORY_LABELS: Record<AuditCategoryKey, string> = {
 };
 
 const DATE_KEYS = ['occurredAt', 'occurred_at', 'createdAt', 'created_at', 'timestamp'];
-const USER_KEYS = ['userName', 'username', 'user', 'user_name'];
+const USER_KEYS = ['userName', 'username', 'user', 'user_name', 'actorName', 'performedBy'];
+const USER_ID_KEYS = ['userId', 'usuarioId', 'actorId', 'accountId', 'performedById'];
+const USER_EMAIL_KEYS = ['userEmail', 'email', 'usuarioEmail', 'actorEmail', 'accountEmail'];
 const ACTION_KEYS = ['action', 'event', 'operation'];
 const RESOURCE_KEYS = ['resource', 'target', 'entity'];
 const DETAIL_KEYS = ['detail', 'description', 'message', 'metadata'];
 const CORRELATION_KEYS = ['correlationId', 'correlation_id', 'traceId', 'trace_id'];
+const IP_KEYS = ['ipAddress', 'ip', 'clientIp', 'remoteAddress', 'sourceIp', 'direccionIp'];
 
 const SUCCESS_TOKENS = new Set(['success', 'successful', 'true', 'ok', '0']);
 const FAILURE_TOKENS = new Set(['failure', 'failed', 'false', 'error', '1']);
@@ -286,9 +289,12 @@ export function SystemConfigPage({ authToken }: PageProps) {
       if (normalizedSearch) {
         const haystack = [
           resolveStringField(event, USER_KEYS),
+          resolveStringField(event, USER_ID_KEYS),
+          resolveStringField(event, USER_EMAIL_KEYS),
           resolveStringField(event, ACTION_KEYS),
           resolveStringField(event, RESOURCE_KEYS),
           resolveStringField(event, DETAIL_KEYS),
+          resolveStringField(event, IP_KEYS),
           resolveStringField(event, CORRELATION_KEYS),
         ]
           .join(' ')
@@ -518,7 +524,9 @@ export function SystemConfigPage({ authToken }: PageProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[160px]">Fecha</TableHead>
-                  <TableHead className="min-w-[160px]">Usuario</TableHead>
+                  <TableHead className="min-w-[180px]">Usuario</TableHead>
+                  <TableHead className="min-w-[140px]">ID Usuario</TableHead>
+                  <TableHead className="min-w-[140px]">IP</TableHead>
                   <TableHead className="min-w-[160px]">Acción</TableHead>
                   <TableHead className="min-w-[200px]">Recurso</TableHead>
                   <TableHead>Estado</TableHead>
@@ -529,13 +537,13 @@ export function SystemConfigPage({ authToken }: PageProps) {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                    <TableCell colSpan={9} className="py-8 text-center text-gray-500">
                       Cargando eventos de auditoría...
                     </TableCell>
                   </TableRow>
                 ) : filteredLogs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                    <TableCell colSpan={9} className="py-8 text-center text-gray-500">
                       No se encontraron eventos que coincidan con los filtros seleccionados.
                     </TableCell>
                   </TableRow>
@@ -545,14 +553,47 @@ export function SystemConfigPage({ authToken }: PageProps) {
                     const category = normalizeAuditCategory(event);
                     const eventDate = formatDateTime(resolveAuditDate(event));
                     const user = resolveStringField(event, USER_KEYS, '—');
+                    const userId = resolveStringField(event, USER_ID_KEYS, '—');
+                    const userEmail = resolveStringField(event, USER_EMAIL_KEYS, '');
+                    const ipAddress = resolveStringField(event, IP_KEYS, '—');
                     const action = resolveStringField(event, ACTION_KEYS, '—');
                     const resource = resolveStringField(event, RESOURCE_KEYS, '—');
                     const detail = resolveStringField(event, DETAIL_KEYS, '—') || '—';
 
+                    let parsedMetadata: string | null = null;
+                    if (typeof event.metadataJson === 'string' && event.metadataJson.trim()) {
+                      try {
+                        const parsed = JSON.parse(event.metadataJson);
+                        if (parsed && typeof parsed === 'object') {
+                          const entries = Object.entries(parsed as Record<string, unknown>)
+                            .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+                            .slice(0, 3);
+                          if (entries.length > 0) {
+                            parsedMetadata = entries.join(' · ');
+                          }
+                        }
+                      } catch {
+                        parsedMetadata = null;
+                      }
+                    }
+
                     return (
                       <TableRow key={event.id ?? `${eventDate}-${action}-${resource}`}>
                         <TableCell>{eventDate}</TableCell>
-                        <TableCell>{user}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span>{user || '—'}</span>
+                            {userEmail && (
+                              <span className="text-xs text-gray-500">{userEmail}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                      <span className="text-sm text-gray-700">{userId || '—'}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-gray-700">{ipAddress || '—'}</span>
+                    </TableCell>
                         <TableCell>{action}</TableCell>
                         <TableCell className="whitespace-nowrap">{resource}</TableCell>
                         <TableCell>
@@ -563,6 +604,12 @@ export function SystemConfigPage({ authToken }: PageProps) {
                         <TableCell>{CATEGORY_LABELS[category]}</TableCell>
                         <TableCell>
                           <p className="text-sm text-gray-700 line-clamp-3">{detail}</p>
+                          {event.id && (
+                            <p className="text-xs text-gray-500 mt-1">ID evento: {event.id}</p>
+                          )}
+                          {parsedMetadata && (
+                            <p className="text-xs text-gray-500 mt-1">Metadata: {parsedMetadata}</p>
+                          )}
                           {event.correlationId && (
                             <p className="text-xs text-gray-500 mt-1">ID correlación: {event.correlationId}</p>
                           )}
