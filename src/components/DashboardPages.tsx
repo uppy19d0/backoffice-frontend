@@ -269,18 +269,15 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
   const isAdmin =
     normalizedRoleLabel.includes('admin') ||
     normalizedRoleLabel.includes('administrador') ||
-    normalizedRoleLevel === 'admin' ||
-    normalizedRoleLevel === 'administrador';
+    normalizedRoleLevel === 'admin';
   const isSupervisor =
     normalizedRoleLabel.includes('supervisor') ||
     normalizedRoleLabel.includes('manager') ||
-    normalizedRoleLevel === 'supervisor' ||
-    normalizedRoleLevel === 'manager';
+    normalizedRoleLevel === 'supervisor';
   const isAnalyst =
     normalizedRoleLabel.includes('analyst') ||
     normalizedRoleLabel.includes('analista') ||
-    normalizedRoleLevel === 'analyst' ||
-    normalizedRoleLevel === 'analista';
+    normalizedRoleLevel === 'analyst';
 
   // Load stats from backend
   useEffect(() => {
@@ -447,10 +444,10 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
   const getFilteredRequests = () => {
     if (!recentRequests || recentRequests.length === 0) return [];
     
-    if (isAnalyst) {
+    if (currentUser?.roleLevel === 'Analyst') {
       // Para analistas: mostrar principalmente sus solicitudes asignadas
       return recentRequests.filter(req => req.assignedTo === currentUser.name).slice(0, 5);
-    } else if (isSupervisor) {
+    } else if (currentUser?.roleLevel === 'Supervisor') {
       // Para managers: mostrar solicitudes que requieren aprobación + en revisión
       return recentRequests.filter(req => 
         normalizeStatus(req.status) === 'review' || 
@@ -1066,18 +1063,15 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const isSupervisorRole =
     normalizedRoleString.includes('supervisor') ||
     normalizedRoleString.includes('manager') ||
-    normalizedRoleLevel === 'supervisor' ||
-    normalizedRoleLevel === 'manager';
+    normalizedRoleLevel === 'supervisor';
   const isAdminRole =
     normalizedRoleString.includes('admin') ||
     normalizedRoleString.includes('administrador') ||
-    normalizedRoleLevel === 'admin' ||
-    normalizedRoleLevel === 'administrador';
+    normalizedRoleLevel === 'admin';
   const isAnalystRole =
     normalizedRoleString.includes('analyst') ||
     normalizedRoleString.includes('analista') ||
-    normalizedRoleLevel === 'analyst' ||
-    normalizedRoleLevel === 'analista';
+    normalizedRoleLevel === 'analyst';
   const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
   const [usingFallbackAnalysts, setUsingFallbackAnalysts] = useState(true);
   const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
@@ -3270,26 +3264,24 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   const [showViewModal, setShowViewModal] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const normalizedBeneficiaryRoleLabel = currentUser?.role?.trim().toLowerCase() ?? '';
-  const normalizedBeneficiaryRoleLevel =
+
+  const roleLabel = currentUser?.role?.trim().toLowerCase() ?? '';
+  const roleLevelString =
     typeof currentUser?.roleLevel === 'string'
       ? currentUser.roleLevel.trim().toLowerCase()
       : '';
   const isAnalyst =
-    normalizedBeneficiaryRoleLabel.includes('analyst') ||
-    normalizedBeneficiaryRoleLabel.includes('analista') ||
-    normalizedBeneficiaryRoleLevel === 'analyst' ||
-    normalizedBeneficiaryRoleLevel === 'analista';
+    roleLabel.includes('analyst') ||
+    roleLabel.includes('analista') ||
+    roleLevelString === 'analyst';
   const isSupervisor =
-    normalizedBeneficiaryRoleLabel.includes('supervisor') ||
-    normalizedBeneficiaryRoleLabel.includes('manager') ||
-    normalizedBeneficiaryRoleLevel === 'supervisor' ||
-    normalizedBeneficiaryRoleLevel === 'manager';
+    roleLabel.includes('supervisor') ||
+    roleLabel.includes('manager') ||
+    roleLevelString === 'supervisor';
   const isAdmin =
-    normalizedBeneficiaryRoleLabel.includes('admin') ||
-    normalizedBeneficiaryRoleLabel.includes('administrador') ||
-    normalizedBeneficiaryRoleLevel === 'admin' ||
-    normalizedBeneficiaryRoleLevel === 'administrador';
+    roleLabel.includes('admin') ||
+    roleLabel.includes('administrador') ||
+    roleLevelString === 'admin';
   // Los beneficiarios no se asignan directamente - solo los supervisores y admins pueden ver todos
   const canViewAllBeneficiaries =
     Boolean(

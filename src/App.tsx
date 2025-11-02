@@ -22,7 +22,7 @@ import {
   updateOwnPassword,
 } from './services/api';
 
-type RoleLevel = 'administrador' | 'manager' | 'analista';
+type RoleLevel = 'Admin' | 'Supervisor' | 'Analyst';
 
 interface Permissions {
   canCreateUsers: boolean;
@@ -133,33 +133,78 @@ const resolveUserStatus = (user?: User | null): number | undefined => {
 
 const isSuspendedStatus = (value: unknown): boolean => normalizeStatusValue(value) === 2;
 
+const ADMIN_PERMISSIONS: Permissions = {
+  canCreateUsers: true,
+  canApproveRequests: true,
+  canReviewRequests: true,
+  canViewReports: true,
+  canManageBeneficiaries: true,
+};
+
+const MANAGER_PERMISSIONS: Permissions = {
+  canCreateUsers: false,
+  canApproveRequests: true,
+  canReviewRequests: true,
+  canViewReports: true,
+  canManageBeneficiaries: true,
+};
+
+const ANALYST_PERMISSIONS: Permissions = {
+  canCreateUsers: false,
+  canApproveRequests: false,
+  canReviewRequests: true,
+  canViewReports: false,
+  canManageBeneficiaries: false,
+};
+
 const ROLE_PERMISSIONS: Record<RoleLevel, Permissions> = {
-  administrador: {
-    canCreateUsers: true,
-    canApproveRequests: true,
-    canReviewRequests: true,
-    canViewReports: true,
-    canManageBeneficiaries: true,
-  },
-  manager: {
-    canCreateUsers: false,
-    canApproveRequests: true,
-    canReviewRequests: true,
-    canViewReports: true,
-    canManageBeneficiaries: true,
-  },
-  analista: {
-    canCreateUsers: false,
-    canApproveRequests: false,
-    canReviewRequests: true,
-    canViewReports: false,
-    canManageBeneficiaries: false,
-  },
+  Admin: ADMIN_PERMISSIONS,
+  Supervisor: MANAGER_PERMISSIONS,
+  Analyst: ANALYST_PERMISSIONS,
+};
+
+const ROLE_SYNONYMS: Record<string, RoleLevel> = {
+  admin: 'Admin',
+  administrador: 'Admin',
+  administrator: 'Admin',
+  'super admin': 'Admin',
+  supervisor: 'Supervisor',
+  manager: 'Supervisor',
+  coordinador: 'Supervisor',
+  coordinator: 'Supervisor',
+  lead: 'Supervisor',
+  jefe: 'Supervisor',
+  gerente: 'Supervisor',
+  analista: 'Analyst',
+  analyst: 'Analyst',
+  operator: 'Analyst',
+  operador: 'Analyst',
 };
 
 const ROLE_HINTS_ADMIN = ['admin', 'administrador', 'administrator', 'super admin'];
 const ROLE_HINTS_MANAGER = ['manager', 'supervisor', 'coordinador', 'coordinator', 'lead', 'jefe', 'gerente'];
 
+const mapRoleSynonym = (value: string | null | undefined): RoleLevel | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return ROLE_SYNONYMS[normalized];
+};
+
+const normalizeRoleLevel = (value: string | null | undefined): RoleLevel | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed === 'Admin' || trimmed === 'Supervisor' || trimmed === 'Analyst') {
+    return trimmed as RoleLevel;
+  }
+  return mapRoleSynonym(trimmed);
+};
 const STRING_CANDIDATES = {
   email: ['email', 'userEmail', 'preferred_username', 'upn', 'nameid', 'unique_name'],
   username: ['userName', 'username', 'user', 'email', 'preferred_username'],
@@ -447,30 +492,25 @@ const resolvePasswordChangeRequirement = (
 };
 
 const determineRoleLevel = (role: string): RoleLevel => {
+  const normalizedRole = normalizeRoleLevel(role);
+  if (normalizedRole) {
+    return normalizedRole;
+  }
+
   if (!role) {
-    return 'administrador';
+    return 'Analyst';
   }
 
   const normalized = role.toLowerCase();
-  if (['admin', 'administrator', 'administrador'].includes(normalized)) {
-    return 'administrador';
-  }
-  if (['manager', 'supervisor', 'coordinador', 'coordinator'].includes(normalized)) {
-    return 'manager';
-  }
-  if (['analyst', 'analista', 'operator', 'operador'].includes(normalized)) {
-    return 'analista';
-  }
-
   if (ROLE_HINTS_ADMIN.some((hint) => normalized.includes(hint))) {
-    return 'administrador';
+    return 'Admin';
   }
 
   if (ROLE_HINTS_MANAGER.some((hint) => normalized.includes(hint))) {
-    return 'manager';
+    return 'Supervisor';
   }
 
-  return 'analista';
+  return 'Analyst';
 };
 
 interface StoredSession {

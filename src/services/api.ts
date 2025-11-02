@@ -798,6 +798,11 @@ export interface RequestDto extends Record<string, unknown> {
   priority?: string;
   assignmentDate?: string | null;
   assignmentNotes?: string | null;
+  auditLogs?: RequestAuditLogDto[] | null;
+  auditTrail?: RequestAuditLogDto[] | null;
+  actionHistory?: RequestAuditLogDto[] | null;
+  documentAccessLogs?: DocumentAccessLogDto[] | null;
+  documentLogs?: DocumentAccessLogDto[] | null;
 }
 
 export interface ListRequestsOptions {
@@ -834,6 +839,13 @@ export async function getRequests(
   return normalizeCollection<RequestDto>(response);
 }
 
+export async function getRequestById(token: string, requestId: string): Promise<RequestDto> {
+  return apiFetch<RequestDto>(`/requests/${encodeURIComponent(requestId)}`, {
+    method: 'GET',
+    token,
+  });
+}
+
 export interface AssignRequestPayload extends Record<string, unknown> {
   analystId: string;
   notes?: string;
@@ -860,6 +872,45 @@ export interface AssignableUserDto extends Record<string, unknown> {
   departmentId?: string;
   departmentName?: string;
   isSameDepartment?: boolean;
+}
+
+export interface RequestAuditLogDto extends Record<string, unknown> {
+  id?: string | number | null;
+  action?: string | null;
+  description?: string | null;
+  detail?: string | null;
+  notes?: string | null;
+  userId?: string | number | null;
+  userName?: string | null;
+  userEmail?: string | null;
+  performedBy?: string | null;
+  ipAddress?: string | null;
+  clientIp?: string | null;
+  createdAt?: string | null;
+  occurredAt?: string | null;
+  timestamp?: string | null;
+  eventDate?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface DocumentAccessLogDto extends Record<string, unknown> {
+  id?: string | number | null;
+  action?: string | null;
+  documentName?: string | null;
+  fileName?: string | null;
+  resource?: string | null;
+  outcome?: string | null;
+  description?: string | null;
+  detail?: string | null;
+  userId?: string | number | null;
+  userName?: string | null;
+  userEmail?: string | null;
+  ipAddress?: string | null;
+  clientIp?: string | null;
+  createdAt?: string | null;
+  occurredAt?: string | null;
+  timestamp?: string | null;
+  eventDate?: string | null;
 }
 
 export interface GetAssignableUsersOptions {

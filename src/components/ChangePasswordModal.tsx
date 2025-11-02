@@ -21,7 +21,7 @@ interface CurrentUser {
   username: string;
   name: string;
   role: string;
-  roleLevel: 'administrador' | 'manager' | 'analista';
+  roleLevel: 'Admin' | 'Supervisor' | 'Analyst';
   permissions: {
     canCreateUsers: boolean;
     canApproveRequests: boolean;
