@@ -5,7 +5,7 @@ interface CurrentUser {
   email?: string | null;
   name: string;
   role: string;
-  roleLevel: 'administrador' | 'manager' | 'analista';
+  roleLevel: 'Admin' | 'Supervisor' | 'Analyst';
   id?: string | null;
   departmentName?: string | null;
   departmentId?: string | null;
@@ -125,6 +125,14 @@ const availableAnalysts = [
   { id: 'analyst3', name: 'Lic. Carmen Rosa Herrera', role: 'Analista de Evaluación' },
   { id: 'analyst4', name: 'Lic. Miguel Ángel Castro', role: 'Analista de Documentos' }
 ];
+
+const isValidGuid = (value?: string | null): value is string => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const trimmed = value.trim();
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(trimmed);
+};
 
 // Helper functions
 const getRequestTypeIcon = (type: string) => {
@@ -252,6 +260,27 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
   const [recentRequests, setRecentRequests] = useState<any[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
+  const roleLabel = currentUser?.role ?? '';
+  const normalizedRoleLabel = roleLabel.trim().toLowerCase();
+  const normalizedRoleLevel =
+    typeof currentUser?.roleLevel === 'string'
+      ? currentUser.roleLevel.trim().toLowerCase()
+      : '';
+  const isAdmin =
+    normalizedRoleLabel.includes('admin') ||
+    normalizedRoleLabel.includes('administrador') ||
+    normalizedRoleLevel === 'admin' ||
+    normalizedRoleLevel === 'administrador';
+  const isSupervisor =
+    normalizedRoleLabel.includes('supervisor') ||
+    normalizedRoleLabel.includes('manager') ||
+    normalizedRoleLevel === 'supervisor' ||
+    normalizedRoleLevel === 'manager';
+  const isAnalyst =
+    normalizedRoleLabel.includes('analyst') ||
+    normalizedRoleLabel.includes('analista') ||
+    normalizedRoleLevel === 'analyst' ||
+    normalizedRoleLevel === 'analista';
 
   // Load stats from backend
   useEffect(() => {
@@ -303,7 +332,7 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
 
   // Estadísticas específicas por rol
   const getStatsForRole = () => {
-    if (currentUser?.roleLevel === 'administrador') {
+    if (isAdmin) {
       return [
         {
           title: 'Total Solicitudes',
@@ -338,7 +367,7 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
           bg: 'bg-green-50'
         },
       ];
-    } else if (currentUser?.roleLevel === 'manager') {
+    } else if (isSupervisor) {
       return [
         {
           title: 'Solicitudes sin Asignar',
@@ -418,10 +447,10 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
   const getFilteredRequests = () => {
     if (!recentRequests || recentRequests.length === 0) return [];
     
-    if (currentUser?.roleLevel === 'analista') {
+    if (isAnalyst) {
       // Para analistas: mostrar principalmente sus solicitudes asignadas
       return recentRequests.filter(req => req.assignedTo === currentUser.name).slice(0, 5);
-    } else if (currentUser?.roleLevel === 'manager') {
+    } else if (isSupervisor) {
       // Para managers: mostrar solicitudes que requieren aprobación + en revisión
       return recentRequests.filter(req => 
         normalizeStatus(req.status) === 'review' || 
@@ -556,7 +585,7 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
       priority: 'low'
     },
     // Solicitudes específicas para analistas
-    ...(currentUser?.roleLevel === 'analista' ? [
+    ...(isAnalyst ? [
       {
         id: '2025-001241',
         applicant: 'Carmen Esperanza López',
@@ -623,9 +652,9 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
             </h1>
           </div>
           <p className="text-blue-100 text-lg max-w-3xl">
-            {currentUser?.roleLevel === 'administrador' 
+            {isAdmin 
               ? 'Panel de administración general para la gestión completa del Sistema Único de Beneficiarios'
-              : currentUser?.roleLevel === 'manager'
+              : isSupervisor
               ? 'Panel de supervisión para la revisión y aprobación de solicitudes de beneficiarios'
               : 'Panel de análisis para la evaluación de solicitudes de beneficiarios'
             }
@@ -659,7 +688,7 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
       </div>
 
       {/* Admin Quick Actions */}
-      {currentUser?.roleLevel === 'administrador' && (
+      {isAdmin && (
         <Card className="border border-gray-200">
           <CardHeader>
             <CardTitle className="text-dr-dark-gray">Acciones Rápidas de Administrador</CardTitle>
@@ -698,7 +727,7 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
       )}
 
       {/* Manager Quick Actions */}
-      {currentUser?.roleLevel === 'manager' && (
+      {isSupervisor && (
         <Card className="border border-gray-200 bg-gradient-to-br from-blue-50 to-white">
           <CardHeader>
             <CardTitle className="text-dr-dark-gray flex items-center gap-2">
@@ -758,17 +787,17 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
       <Card className="border border-gray-200">
         <CardHeader>
           <CardTitle className="text-dr-dark-gray">
-            {currentUser?.roleLevel === 'administrador' 
+            {isAdmin 
               ? 'Solicitudes Recientes del Sistema'
-              : currentUser?.roleLevel === 'manager'
+              : isSupervisor
               ? 'Solicitudes Pendientes de Asignación'
               : 'Mis Solicitudes Asignadas'
             }
           </CardTitle>
           <CardDescription className="text-gray-600">
-            {currentUser?.roleLevel === 'administrador' 
+            {isAdmin 
               ? 'Últimas solicitudes de beneficiarios recibidas en el sistema'
-              : currentUser?.roleLevel === 'manager'
+              : isSupervisor
               ? 'Solicitudes que requieren asignación a analistas'
               : 'Solicitudes asignadas para su revisión y análisis'
             }
@@ -1030,17 +1059,25 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   const roleString = currentUser?.role ?? '';
   const normalizedRoleString = roleString.trim().toLowerCase();
+  const normalizedRoleLevel =
+    typeof currentUser?.roleLevel === 'string'
+      ? currentUser.roleLevel.trim().toLowerCase()
+      : '';
   const isSupervisorRole =
     normalizedRoleString.includes('supervisor') ||
     normalizedRoleString.includes('manager') ||
-    currentUser?.roleLevel === 'manager';
+    normalizedRoleLevel === 'supervisor' ||
+    normalizedRoleLevel === 'manager';
   const isAdminRole =
     normalizedRoleString.includes('admin') ||
-    normalizedRoleString.includes('administrador');
+    normalizedRoleString.includes('administrador') ||
+    normalizedRoleLevel === 'admin' ||
+    normalizedRoleLevel === 'administrador';
   const isAnalystRole =
     normalizedRoleString.includes('analyst') ||
     normalizedRoleString.includes('analista') ||
-    currentUser?.roleLevel === 'analista';
+    normalizedRoleLevel === 'analyst' ||
+    normalizedRoleLevel === 'analista';
   const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
   const [usingFallbackAnalysts, setUsingFallbackAnalysts] = useState(true);
   const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
@@ -1126,6 +1163,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       return;
     }
 
+    const departmentUuid = isValidGuid(currentUser?.departmentId)
+      ? currentUser?.departmentId?.trim() ?? null
+      : null;
+
     setIsLoadingAnalysts(true);
     setAssignDialogError(null);
 
@@ -1134,10 +1175,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       try {
         const assignableUsers = await getAssignableUsers(authToken, {
           includeRelatedRoles: true,
-          ...(currentUser?.departmentId
+          ...(departmentUuid
             ? {
-                departmentId: currentUser.departmentId,
-                prioritizeDepartmentId: currentUser.departmentId,
+                departmentId: departmentUuid,
+                prioritizeDepartmentId: departmentUuid,
               }
             : {}),
         });
@@ -1415,7 +1456,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       return;
     }
 
-    const restrictToTeam = !isAdminRole && (isSupervisorRole || currentUser?.roleLevel === 'manager');
+    const restrictToTeam = !isAdminRole && isSupervisorRole;
     if (restrictToTeam && analystInfo.isSameDepartment === false) {
       const message =
         'Solo puedes asignar solicitudes a analistas que forman parte de tu equipo o departamento.';
@@ -1565,7 +1606,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   };
 
   // Get count of unassigned requests for managers/admins
-  const unassignedCount = (currentUser?.roleLevel === 'manager' || currentUser?.roleLevel === 'administrador') 
+  const unassignedCount = (isSupervisorRole || isAdminRole) 
     ? requests.filter((req) => normalizeStatus(req.status) === 'pending' && !resolveRequestAssigneeName(req)).length 
     : 0;
 
@@ -1575,17 +1616,17 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-dr-dark-gray">
-            {currentUser?.roleLevel === 'manager' 
+            {isSupervisorRole 
               ? 'Gestión de Solicitudes' 
-              : currentUser?.roleLevel === 'analista'
+              : isAnalystRole
               ? 'Mis Solicitudes Asignadas'
               : 'Solicitudes del Sistema'
             }
           </h1>
           <p className="text-gray-600 mt-1">
-            {currentUser?.roleLevel === 'manager' 
+            {isSupervisorRole 
               ? 'Asigne solicitudes a analistas y supervise el progreso' 
-              : currentUser?.roleLevel === 'analista'
+              : isAnalystRole
               ? 'Revise y procese las solicitudes que le han sido asignadas'
               : 'Monitoree todas las solicitudes del sistema'
             }
@@ -1593,7 +1634,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         </div>
 
         {/* Unassigned Requests Alert for Managers */}
-        {(currentUser?.roleLevel === 'manager' || currentUser?.roleLevel === 'administrador') && unassignedCount > 0 && (
+        {(isSupervisorRole || isAdminRole) && unassignedCount > 0 && (
           <Alert className="bg-amber-50 border-amber-200">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800">
@@ -1668,7 +1709,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               <CardTitle>Solicitudes</CardTitle>
               <CardDescription>
                 {isLoading ? 'Cargando...' : `${filteredRequests.length} solicitud${filteredRequests.length !== 1 ? 'es' : ''}`} 
-                {!isLoading && currentUser?.roleLevel === 'analista' ? ' asignada' + (filteredRequests.length !== 1 ? 's' : '') : ''}
+                {!isLoading && isAnalystRole ? ' asignada' + (filteredRequests.length !== 1 ? 's' : '') : ''}
               </CardDescription>
             </div>
           </div>
@@ -2241,7 +2282,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               )}
 
               {/* Action Buttons for Analysts */}
-              {currentUser?.roleLevel === 'analista' && selectedRequest.assignedTo === currentUser.name && 
+              {isAnalystRole && selectedRequest.assignedTo === currentUser.name && 
                selectedRequest.status === 'assigned' && (
                 <div className="flex gap-2 pt-4 border-t">
                   <Button
@@ -3229,16 +3270,32 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   const [showViewModal, setShowViewModal] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-
-  const isAnalyst = currentUser?.roleLevel === 'analista';
-  const isSupervisor = currentUser?.roleLevel === 'manager';
-  const isAdmin = currentUser?.roleLevel === 'administrador';
+  const normalizedBeneficiaryRoleLabel = currentUser?.role?.trim().toLowerCase() ?? '';
+  const normalizedBeneficiaryRoleLevel =
+    typeof currentUser?.roleLevel === 'string'
+      ? currentUser.roleLevel.trim().toLowerCase()
+      : '';
+  const isAnalyst =
+    normalizedBeneficiaryRoleLabel.includes('analyst') ||
+    normalizedBeneficiaryRoleLabel.includes('analista') ||
+    normalizedBeneficiaryRoleLevel === 'analyst' ||
+    normalizedBeneficiaryRoleLevel === 'analista';
+  const isSupervisor =
+    normalizedBeneficiaryRoleLabel.includes('supervisor') ||
+    normalizedBeneficiaryRoleLabel.includes('manager') ||
+    normalizedBeneficiaryRoleLevel === 'supervisor' ||
+    normalizedBeneficiaryRoleLevel === 'manager';
+  const isAdmin =
+    normalizedBeneficiaryRoleLabel.includes('admin') ||
+    normalizedBeneficiaryRoleLabel.includes('administrador') ||
+    normalizedBeneficiaryRoleLevel === 'admin' ||
+    normalizedBeneficiaryRoleLevel === 'administrador';
   // Los beneficiarios no se asignan directamente - solo los supervisores y admins pueden ver todos
   const canViewAllBeneficiaries =
     Boolean(
       authToken &&
         currentUser &&
-        (currentUser.roleLevel === 'manager' || currentUser.roleLevel === 'administrador'),
+        (isSupervisor || isAdmin),
     );
 
   const analystTokens = useMemo(() => {
