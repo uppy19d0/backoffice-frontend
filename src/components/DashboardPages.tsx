@@ -3930,6 +3930,7 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
   const currentMonth = useMemo(() => new Date().getMonth() + 1, []);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [reportActionLoading, setReportActionLoading] = useState<string | null>(null);
 
   const availableYears = useMemo(() => {
     const years: number[] = [];
@@ -4033,7 +4034,8 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
 
   const handleViewMonthlyReport = async () => {
     if (!authToken) return;
-    
+    const actionKey = 'view-monthly';
+    setReportActionLoading(actionKey);
     try {
       const report = await getMonthlyRequestReport(authToken, selectedYear, selectedMonth);
       console.log('Reporte mensual:', report);
@@ -4046,12 +4048,15 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
           month: selectedMonth,
         }),
       );
+    } finally {
+      setReportActionLoading((current) => (current === actionKey ? null : current));
     }
   };
 
   const handleViewAnnualReport = async () => {
     if (!authToken) return;
-    
+    const actionKey = 'view-annual';
+    setReportActionLoading(actionKey);
     try {
       const report = await getAnnualRequestReport(authToken, selectedYear);
       console.log('Reporte anual:', report);
@@ -4063,6 +4068,8 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
           year: selectedYear,
         }),
       );
+    } finally {
+      setReportActionLoading((current) => (current === actionKey ? null : current));
     }
   };
 
@@ -4070,6 +4077,8 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
   const handleDownloadPDF = async (reportType: string) => {
     if (!authToken) return;
     
+    const actionKey = `pdf-${reportType}`;
+    setReportActionLoading(actionKey);
     let context: { year?: number; month?: number } | undefined;
 
     try {
@@ -4110,11 +4119,15 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
       toast.error(
         resolveReportErrorMessage(error, 'Error al descargar el reporte PDF.', context),
       );
+    } finally {
+      setReportActionLoading((current) => (current === actionKey ? null : current));
     }
   };
 
   const handleDownloadExcel = async (reportType: string) => {
     if (!authToken) return;
+    const actionKey = `excel-${reportType}`;
+    setReportActionLoading(actionKey);
     let context: { year?: number; month?: number } | undefined;
 
     try {
@@ -4155,6 +4168,40 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
       toast.error(
         resolveReportErrorMessage(error, 'Error al descargar el reporte Excel.', context),
       );
+    } finally {
+      setReportActionLoading((current) => (current === actionKey ? null : current));
+    }
+  };
+
+  const handleViewActiveUsersReport = async () => {
+    if (!authToken) return;
+    const actionKey = 'view-active-users';
+    setReportActionLoading(actionKey);
+    try {
+      const report = await getActiveUsersReport(authToken);
+      console.log('Usuarios activos:', report);
+      toast.success('Reporte de usuarios activos cargado');
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error al cargar reporte');
+    } finally {
+      setReportActionLoading((current) => (current === actionKey ? null : current));
+    }
+  };
+
+  const handleViewUsersByRoleReport = async () => {
+    if (!authToken) return;
+    const actionKey = 'view-users-by-role';
+    setReportActionLoading(actionKey);
+    try {
+      const report = await getUsersByRoleReport(authToken);
+      console.log('Usuarios por rol:', report);
+      toast.success('Reporte de usuarios por rol cargado');
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error al cargar reporte');
+    } finally {
+      setReportActionLoading((current) => (current === actionKey ? null : current));
     }
   };
 
@@ -4301,29 +4348,59 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
                       Solicitudes del mes actual con desglose por estado y tipo
                     </p>
                     <div className="flex gap-2 mt-3">
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         onClick={handleViewMonthlyReport}
                         className="bg-dr-blue hover:bg-dr-blue-dark"
+                        disabled={reportActionLoading === 'view-monthly'}
                       >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver
+                        {reportActionLoading === 'view-monthly' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Generando...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadPDF('monthly-requests')}
+                        disabled={reportActionLoading === 'pdf-monthly-requests'}
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        PDF
+                        {reportActionLoading === 'pdf-monthly-requests' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadExcel('monthly-requests')}
+                        disabled={reportActionLoading === 'excel-monthly-requests'}
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-1" />
-                        Excel
+                        {reportActionLoading === 'excel-monthly-requests' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <FileSpreadsheet className="h-4 w-4 mr-1" />
+                            Excel
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -4341,29 +4418,59 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
                       Análisis anual con desglose mensual de solicitudes
                     </p>
                     <div className="flex gap-2 mt-3">
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         onClick={handleViewAnnualReport}
                         className="bg-green-600 hover:bg-green-700"
+                        disabled={reportActionLoading === 'view-annual'}
                       >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver
+                        {reportActionLoading === 'view-annual' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Generando...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadPDF('annual-requests')}
+                        disabled={reportActionLoading === 'pdf-annual-requests'}
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        PDF
+                        {reportActionLoading === 'pdf-annual-requests' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadExcel('annual-requests')}
+                        disabled={reportActionLoading === 'excel-annual-requests'}
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-1" />
-                        Excel
+                        {reportActionLoading === 'excel-annual-requests' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <FileSpreadsheet className="h-4 w-4 mr-1" />
+                            Excel
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -4381,38 +4488,59 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
                       Usuarios activos agrupados por departamento y provincia
                     </p>
                     <div className="flex gap-2 mt-3">
-                      <Button 
-                        size="sm" 
-                        onClick={async () => {
-                          if (!authToken) return;
-                          try {
-                            const report = await getActiveUsersReport(authToken);
-                            console.log('Usuarios activos:', report);
-                            toast.success('Reporte de usuarios activos cargado');
-                          } catch (error) {
-                            toast.error('Error al cargar reporte');
-                          }
-                        }}
+                      <Button
+                        size="sm"
+                        onClick={handleViewActiveUsersReport}
                         className="bg-amber-600 hover:bg-amber-700"
+                        disabled={reportActionLoading === 'view-active-users'}
                       >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver
+                        {reportActionLoading === 'view-active-users' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Generando...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadPDF('active-users')}
+                        disabled={reportActionLoading === 'pdf-active-users'}
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        PDF
+                        {reportActionLoading === 'pdf-active-users' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadExcel('active-users')}
+                        disabled={reportActionLoading === 'excel-active-users'}
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-1" />
-                        Excel
+                        {reportActionLoading === 'excel-active-users' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <FileSpreadsheet className="h-4 w-4 mr-1" />
+                            Excel
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -4430,38 +4558,59 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
                       Distribución de usuarios agrupados por roles del sistema
                     </p>
                     <div className="flex gap-2 mt-3">
-                      <Button 
-                        size="sm" 
-                        onClick={async () => {
-                          if (!authToken) return;
-                          try {
-                            const report = await getUsersByRoleReport(authToken);
-                            console.log('Usuarios por rol:', report);
-                            toast.success('Reporte de usuarios por rol cargado');
-                          } catch (error) {
-                            toast.error('Error al cargar reporte');
-                          }
-                        }}
+                      <Button
+                        size="sm"
+                        onClick={handleViewUsersByRoleReport}
                         className="bg-purple-600 hover:bg-purple-700"
+                        disabled={reportActionLoading === 'view-users-by-role'}
                       >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver
+                        {reportActionLoading === 'view-users-by-role' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Generando...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadPDF('users-by-role')}
+                        disabled={reportActionLoading === 'pdf-users-by-role'}
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        PDF
+                        {reportActionLoading === 'pdf-users-by-role' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </>
+                        )}
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleDownloadExcel('users-by-role')}
+                        disabled={reportActionLoading === 'excel-users-by-role'}
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-1" />
-                        Excel
+                        {reportActionLoading === 'excel-users-by-role' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <FileSpreadsheet className="h-4 w-4 mr-1" />
+                            Excel
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
