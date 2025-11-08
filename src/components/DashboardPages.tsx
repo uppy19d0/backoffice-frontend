@@ -3096,7 +3096,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
   };
 
   const getTypeConfig = (type?: string) => {
-    switch (type) {
+    const normalizedType =
+      type?.toLowerCase().replace(/\s+/g, '-').replace(/_/g, '-') ?? 'general';
+
+    switch (normalizedType) {
       case 'request':
         return {
           label: 'Solicitud',
@@ -3111,6 +3114,13 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
           avatarBg: 'bg-amber-100 text-amber-700 border-amber-200',
           badgeClass: 'border-amber-200 bg-amber-50 text-amber-700'
         };
+      case 'request-unassigned':
+        return {
+          label: 'Solicitud sin asignar',
+          icon: <UserMinus className="h-4 w-4" />,
+          avatarBg: 'bg-rose-100 text-rose-700 border-rose-200',
+          badgeClass: 'border-rose-200 bg-rose-50 text-rose-700'
+        };
       case 'system':
         return {
           label: 'Sistema',
@@ -3120,7 +3130,12 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
         };
       default:
         return {
-          label: type ? type.charAt(0).toUpperCase() + type.slice(1) : 'General',
+          label: type
+            ? type
+                .split(/[\s_\-]+/)
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ')
+            : 'General',
           icon: <Bell className="h-4 w-4" />,
           avatarBg: 'bg-gray-100 text-gray-600 border-gray-200',
           badgeClass: 'border-gray-200 bg-gray-50 text-gray-700'
@@ -3263,12 +3278,17 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
         </div>
       </div>
 
-      <Card className="border border-slate-200 bg-white shadow-sm">
-        <CardContent className="space-y-6 p-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <Card className="relative overflow-hidden border-none bg-gradient-to-br from-white via-slate-50 to-white shadow-xl ring-1 ring-slate-200/70">
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute inset-y-0 right-0 h-full w-1/2 bg-[radial-gradient(circle_at_top,rgba(15,118,255,0.08),transparent_55%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.06),transparent_60%)]" />
+        </div>
+        <CardContent className="relative space-y-8 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-600">Filtros rápidos</p>
-              <p className="text-xs text-slate-500">Aplica el estado que necesites con un clic.</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-dr-blue">Filtros inteligentes</p>
+              <p className="text-base font-semibold text-dr-dark-gray">Afina tu vista de alertas en segundos</p>
+              <p className="text-xs text-slate-500">Combina búsquedas, estados y fechas para encontrar lo que necesitas.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {quickStatusFilters.map((filter) => {
@@ -3278,10 +3298,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                     key={filter.value}
                     type="button"
                     onClick={() => setStatusFilter(filter.value)}
-                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                    className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-all ${
                       isActive
-                        ? 'border-dr-blue bg-white text-dr-blue shadow'
-                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                        ? 'border-transparent bg-dr-blue text-white shadow-lg shadow-dr-blue/30'
+                        : 'border-white/70 bg-white/70 text-slate-500 hover:bg-white'
                     }`}
                   >
                     {filter.label}
@@ -3291,11 +3311,11 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
             </div>
           </div>
 
-          <Separator className="bg-slate-200" />
-
           <div className="grid gap-6 md:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="search">Buscar</Label>
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
+              <Label htmlFor="search" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </Label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
@@ -3303,17 +3323,19 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                   placeholder="Buscar notificaciones..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="border-slate-200 bg-white pl-10 text-sm focus-visible:ring-2 focus-visible:ring-dr-blue"
+                  className="border-none bg-transparent pl-10 text-sm text-dr-dark-gray focus-visible:ring-2 focus-visible:ring-dr-blue"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo</Label>
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
+              <Label htmlFor="type" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Tipo
+              </Label>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger
                   id="type"
-                  className="border-slate-200 bg-white text-sm focus:ring-2 focus:ring-dr-blue"
+                  className="border-none bg-transparent text-sm text-dr-dark-gray focus:ring-2 focus:ring-dr-blue"
                 >
                   <SelectValue placeholder="Todos los tipos" />
                 </SelectTrigger>
@@ -3334,12 +3356,14 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="priority">Prioridad</Label>
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
+              <Label htmlFor="priority" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Prioridad
+              </Label>
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger
                   id="priority"
-                  className="border-slate-200 bg-white text-sm focus:ring-2 focus:ring-dr-blue"
+                  className="border-none bg-transparent text-sm text-dr-dark-gray focus:ring-2 focus:ring-dr-blue"
                 >
                   <SelectValue placeholder="Todas las prioridades" />
                 </SelectTrigger>
@@ -3352,12 +3376,14 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="date">Fecha</Label>
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
+              <Label htmlFor="date" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Fecha
+              </Label>
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger
                   id="date"
-                  className="border-slate-200 bg-white text-sm focus:ring-2 focus:ring-dr-blue"
+                  className="border-none bg-transparent text-sm text-dr-dark-gray focus:ring-2 focus:ring-dr-blue"
                 >
                   <SelectValue placeholder="Todas las fechas" />
                 </SelectTrigger>
@@ -3374,15 +3400,25 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
       </Card>
 
       {/* Lista de notificaciones */}
-      <Card className="border border-slate-200 bg-white shadow-sm">
-        <CardHeader className="border-b border-slate-100 pb-4">
+      <Card className="border-none bg-white shadow-xl ring-1 ring-slate-100">
+        <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-white to-slate-50 pb-4">
           <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg font-semibold text-dr-dark-gray">
-            <span>Notificaciones ({filteredNotifications.length})</span>
-            {error && (
-              <Badge variant="destructive" className="text-xs">
-                Error al cargar
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-400">Centro cronológico</p>
+              <span className="text-base font-semibold text-dr-dark-gray">
+                Notificaciones ({filteredNotifications.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {error && (
+                <Badge variant="destructive" className="text-xs">
+                  Error al cargar
+                </Badge>
+              )}
+              <Badge className="bg-dr-blue/10 text-dr-blue">
+                {unreadCount} sin leer
               </Badge>
-            )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -3397,78 +3433,127 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
               No se encontraron notificaciones con los filtros aplicados
             </div>
           ) : (
-            <div className="relative p-4 md:p-6">
-              <div className="absolute left-6 top-6 bottom-6 hidden md:block border-l border-dashed border-slate-200" />
+            <div className="relative p-4 md:p-8">
+              <div className="absolute left-6 top-8 bottom-8 hidden md:block">
+                <div className="h-full w-px bg-gradient-to-b from-dr-blue/25 via-slate-200 to-transparent" />
+              </div>
               <div className="space-y-6">
                 {filteredNotifications.map((notification) => {
                   const typeConfig = getTypeConfig(notification.type);
                   const isUnread = !notification.read;
+                  const normalizedType =
+                    notification.type
+                      ?.toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/_/g, '-') ?? 'general';
+                  const isUnassignedAlert = normalizedType === 'request-unassigned';
+                  const notificationId = notification.id ?? 'sin-id';
+                  const contentLayoutClass = isUnassignedAlert
+                    ? 'flex w-full flex-col items-center gap-4 text-center'
+                    : 'flex flex-col gap-4 md:flex-row md:items-start md:justify-between';
+                  const metaWrapperClass = isUnassignedAlert
+                    ? 'flex flex-col gap-3 items-center text-center'
+                    : 'flex flex-col gap-3 text-left md:text-right';
+                  const badgeRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-2'
+                    : 'flex flex-wrap items-center gap-2';
+                  const statusRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap gap-2 justify-center'
+                    : 'flex flex-wrap gap-2 md:justify-end';
+                  const footerWrapperClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500'
+                    : 'flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500';
+                  const footerIdClass = isUnassignedAlert
+                    ? 'inline-flex items-center gap-2 justify-center'
+                    : 'inline-flex items-center gap-2';
                   return (
-                    <div key={notification.id} className="relative md:pl-10">
+                    <div key={notification.id} className="relative md:pl-14">
                       <span
-                        className={`absolute left-6 top-6 hidden h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white shadow-md md:block ${
-                          isUnread ? 'bg-blue-500' : 'bg-slate-300'
+                        className={`absolute left-5 top-6 hidden h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-white shadow-md md:flex ${
+                          isUnread ? 'bg-dr-blue' : 'bg-slate-300'
                         }`}
                       />
                       <div
-                        className={`rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+                        className={`group relative overflow-hidden rounded-2xl border bg-white/95 p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
                           isUnread
-                            ? 'border-blue-200 bg-blue-50/70 shadow-blue-100 hover:shadow-lg'
-                            : 'border-slate-100 bg-white hover:shadow-md'
+                            ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
+                            : 'border-slate-100 hover:shadow-md'
                         }`}
                       >
-                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                          <div className="flex flex-1 gap-4">
-                            <div
-                              className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${typeConfig.avatarBg}`}
-                            >
-                              {typeConfig.icon}
-                            </div>
-                            <div className="min-w-0 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs font-medium uppercase ${typeConfig.badgeClass}`}
+                        <span
+                          className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
+                            isUnread
+                              ? 'from-dr-blue via-sky-400 to-transparent'
+                              : 'from-slate-200 via-slate-50 to-transparent'
+                          }`}
+                        />
+                        <div className="flex flex-col gap-4">
+                          <div className={contentLayoutClass}>
+                            <div className={`space-y-3 ${isUnassignedAlert ? 'w-full max-w-2xl' : ''}`}>
+                              <div className={`${badgeRowClass} text-xs font-semibold`}>
+                                <span
+                                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${typeConfig.badgeClass}`}
                                 >
+                                  {typeConfig.icon}
                                   {typeConfig.label}
-                                </Badge>
+                                </span>
                                 {isUnread && (
-                                  <Badge className="border-transparent bg-dr-blue/10 text-[11px] font-semibold uppercase tracking-wide text-dr-blue">
+                                  <span className="inline-flex items-center rounded-full bg-dr-blue/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-dr-blue">
                                     Nuevo
-                                  </Badge>
+                                  </span>
                                 )}
                               </div>
-                              <h3 className="text-base font-semibold text-dr-dark-gray">
-                                {notification.title}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                {notification.message}
-                              </p>
+                              <div className={`space-y-2 ${isUnassignedAlert ? 'text-center' : ''}`}>
+                                <h3 className="text-lg font-semibold text-dr-dark-gray">
+                                  {notification.title}
+                                </h3>
+                                <p className="text-sm leading-relaxed text-slate-600">
+                                  {notification.message}
+                                </p>
+                              </div>
+                              {isUnassignedAlert && (
+                                <div className="mx-auto flex w-full flex-col items-center gap-3 rounded-2xl border border-dr-blue/20 bg-gradient-to-br from-dr-blue/5 via-white to-white p-4 text-center shadow-inner">
+                                  <div className="inline-flex items-center gap-2 rounded-full bg-dr-blue/10 px-4 py-1 text-sm font-semibold text-dr-blue">
+                                    <UserMinus className="h-4 w-4" />
+                                    Acción requerida
+                                  </div>
+                                  <p className="text-sm text-slate-600">
+                                    Asigna un analista disponible para dar seguimiento a esta solicitud pendiente.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div className={metaWrapperClass}>
+                              <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+                                <Clock className="h-3.5 w-3.5" />
+                                {formatDate(notification.createdAt)}
+                              </span>
+                              <div className={statusRowClass}>
+                                {getPriorityBadge(notification.priority)}
+                                <Badge
+                                  className={`text-xs font-semibold ${
+                                    notification.read
+                                      ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                      : 'border-dr-blue/30 bg-dr-blue/10 text-dr-blue'
+                                  }`}
+                                >
+                                  {notification.read ? 'Leída' : 'Sin leer'}
+                                </Badge>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex flex-col gap-3 text-left md:text-right">
-                            <span className="flex items-center gap-2 text-xs text-gray-500 md:justify-end">
-                              <Clock className="h-3.5 w-3.5" />
-                              {formatDate(notification.createdAt)}
+
+                          <div className={footerWrapperClass}>
+                            <span className={footerIdClass}>
+                              <Shield className="h-3.5 w-3.5 text-slate-400" />
+                              ID #{notificationId}
                             </span>
-                            <div className="flex flex-wrap gap-2 md:justify-end">
-                              {getPriorityBadge(notification.priority)}
-                              <Badge
-                                className={`text-xs font-medium ${
-                                  notification.read
-                                    ? 'border-slate-200 bg-slate-100 text-slate-600'
-                                    : 'border-blue-200 bg-blue-50 text-blue-700'
-                                }`}
-                              >
-                                {notification.read ? 'Leída' : 'Sin leer'}
-                              </Badge>
-                            </div>
                             {isUnread && (
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
                                 onClick={() => markAsRead(notification.id)}
-                                className="border-blue-200 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                                className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
                                 title="Marcar como leída"
                               >
                                 <Check className="mr-2 h-4 w-4" />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -43,6 +43,7 @@ import {
   TrendingUp,
   UserPlus,
   UserCheck,
+  UserMinus,
   ChevronRight,
   Key,
   User,
@@ -127,13 +128,6 @@ const getNavigationItems = (permissions?: {
       description: "Revisión de solicitudes"
     },
     { 
-      id: "notifications", 
-      label: "Notificaciones", 
-      icon: Bell, 
-      permission: null,
-      description: "Historial de alertas y avisos"
-    },
-    { 
       id: "reports", 
       label: "Reportes", 
       icon: FileText, 
@@ -183,6 +177,7 @@ const notificationTypeIcons: Record<string, React.ComponentType<{ className?: st
   system: Info,
   request: ClipboardList,
   'request-assignment': UserPlus,
+  'request-unassigned': UserMinus,
   assignment: UserPlus,
   approval: CheckCircle,
   general: Bell,
@@ -291,6 +286,12 @@ export function DashboardLayout({
 
   const navigationItems = getNavigationItems(userPermissions);
 
+  const goToNotificationsPage = useCallback(() => {
+    setShowNotifications(false);
+    void refreshNotifications({ showErrors: true });
+    onPageChange('notifications');
+  }, [onPageChange, refreshNotifications]);
+
   const getCurrentPageTitle = () => {
     const currentItem = navigationItems.find((item) => item.id === currentPage);
     return currentItem?.label || "Panel Principal";
@@ -334,7 +335,7 @@ export function DashboardLayout({
                     <img
                       src={governmentLogo}
                       alt="SIUBEN - Sistema Único de Beneficiarios República Dominicana"
-                      className="h-14 group-data-[collapsible=icon]:h-9 w-auto max-w-none transition-all duration-300 filter drop-shadow-md group-data-[collapsible=icon]:drop-shadow-sm"
+                      className="h-24 group-data-[collapsible=icon]:h-24 w-auto max-w-none transition-all duration-300 filter drop-shadow-md group-data-[collapsible=icon]:drop-shadow-sm"
                       style={{
                         imageRendering: 'crisp-edges',
                         backfaceVisibility: 'hidden',
@@ -396,6 +397,99 @@ export function DashboardLayout({
                       item.permission !== null &&
                       userPermissions &&
                       !userPermissions[item.permission as keyof typeof userPermissions];
+                    const isNotificationsItem = item.id === "notifications";
+
+                    if (isNotificationsItem) {
+                      const hasUnread = unreadCount > 0;
+                      const notificationCountLabel = hasUnread
+                        ? unreadCount > 99
+                          ? '99+'
+                          : unreadCount
+                        : '0';
+                      return (
+                        <SidebarMenuItem key={item.id}>
+                          <SidebarMenuButton
+                            onClick={() => {
+                              if (isDisabled) return;
+                              onPageChange(item.id);
+                            }}
+                            isActive={isActive}
+                            tooltip={item.label}
+                            disabled={isDisabled}
+                            className={`
+                              notification-nav-button group relative w-full flex-col items-start gap-3 rounded-2xl border px-4 py-4 text-left transition-all duration-300
+                              group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:border group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-2
+                              ${
+                                isActive
+                                  ? "bg-gradient-to-r from-dr-blue/15 via-white to-white text-dr-dark-gray shadow-lg border-dr-blue/30"
+                                  : "bg-white/85 border-slate-200 text-dr-dark-gray hover:border-dr-blue/20 hover:bg-white shadow-sm"
+                              }
+                              ${isDisabled ? "opacity-60 cursor-not-allowed" : ""}
+                            `}
+                          >
+                            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-dr-blue/10 via-transparent to-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-data-[collapsible=icon]:hidden" />
+                            <div className="relative hidden w-full flex-col items-center gap-2 group-data-[collapsible=icon]:flex">
+                              <div
+                                className={`relative rounded-2xl border p-2 ${
+                                  hasUnread
+                                    ? "border-dr-blue/40 bg-dr-blue text-white shadow-lg shadow-dr-blue/30"
+                                    : "border-slate-200 bg-white text-slate-500"
+                                }`}
+                              >
+                                <Icon className="h-5 w-5" />
+                                {hasUnread && (
+                                  <>
+                                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-dr-red text-[10px] font-bold text-white shadow-sm">
+                                      {notificationCountLabel}
+                                    </span>
+                                    <span className="absolute -top-1 -right-1 h-4 w-4 animate-ping rounded-full bg-dr-red/60" />
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="relative flex w-full items-center gap-3 group-data-[collapsible=icon]:hidden">
+                              <div
+                                className={`relative rounded-2xl border p-3 shadow-inner ${
+                                  hasUnread
+                                    ? "border-dr-blue/30 bg-dr-blue/10 text-dr-blue"
+                                    : "border-slate-200 bg-white text-slate-500"
+                                }`}
+                              >
+                                <Icon className="h-5 w-5" />
+                                {hasUnread && (
+                                  <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-dr-red px-1 text-[11px] font-semibold text-white shadow-sm">
+                                    {notificationCountLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-dr-dark-gray leading-tight">
+                                  Centro de alertas
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {hasUnread ? `${notificationCountLabel} pendientes` : "Todo al día"}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${
+                                    hasUnread ? "bg-dr-blue text-white" : "bg-slate-100 text-slate-500"
+                                  }`}
+                                >
+                                  {hasUnread ? "Ver alertas" : "Al día"}
+                                </span>
+                              </div>
+                            </div>
+                            {isActive && (
+                              <div className="relative z-10 rounded-xl border border-dr-blue/20 bg-dr-blue/10 px-3 py-1 text-[11px] font-semibold text-dr-blue shadow-sm group-data-[collapsible=icon]:hidden">
+                                Activo
+                              </div>
+                            )}
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    }
+
                     return (
                       <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
@@ -435,20 +529,11 @@ export function DashboardLayout({
                             {item.label}
                           </span>
                           
-                          {item.id === "notifications" && unreadCount > 0 && (
-                            <span
-                              className="absolute right-3 top-2 z-10 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-dr-red px-1 text-xs font-bold text-white shadow-sm group-data-[collapsible=icon]:right-1.5 group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:min-w-[16px]"
-                              aria-label={`${unreadCount} notificaciones sin leer`}
-                            >
-                              {unreadCount > 99 ? '99+' : unreadCount}
-                            </span>
-                          )}
-                          
-                          {/* Indicador de página activa mejorado */}
                           {isActive && (
-                            <div className="relative z-10 ml-auto flex items-center gap-1 group-data-[collapsible=icon]:hidden">
-                              <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
-                              <ChevronRight className="h-4 w-4 text-gray-500" />
+                            <div className="relative z-10 ml-auto group-data-[collapsible=icon]:hidden">
+                              <span className="inline-flex items-center rounded-full bg-dr-blue/10 px-3 py-1 text-[11px] font-semibold text-dr-blue shadow-sm">
+                                Activo
+                              </span>
                             </div>
                           )}
                         </SidebarMenuButton>
@@ -522,6 +607,14 @@ export function DashboardLayout({
                     <DropdownMenuSeparator />
                   </>
                 )}
+                <DropdownMenuItem 
+                  onClick={goToNotificationsPage}
+                  className="cursor-pointer font-arial-rounded p-3 focus:bg-blue-50 hover:bg-blue-50 group"
+                >
+                  <Bell className="mr-3 h-4 w-4 text-dr-blue group-hover:scale-105 transition-transform" />
+                  <span className="text-dr-blue font-semibold">Centro de notificaciones</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem 
                   onClick={onLogout}
                   className="cursor-pointer text-dr-red focus:text-dr-red focus:bg-red-50 hover:bg-red-50 font-arial-rounded p-3 group"
@@ -699,11 +792,7 @@ export function DashboardLayout({
                         <div className="p-3 border-t border-gray-100 bg-gray-50/50">
                           <button
                             className="w-full text-dr-blue hover:bg-blue-50 font-semibold py-2 px-4 rounded transition-colors"
-                            onClick={() => {
-                              setShowNotifications(false);
-                              void refreshNotifications({ showErrors: true });
-                              onPageChange('notifications');
-                            }}
+                            onClick={goToNotificationsPage}
                           >
                             Ver todas las notificaciones
                           </button>
@@ -771,6 +860,14 @@ export function DashboardLayout({
                         <DropdownMenuSeparator />
                       </>
                     )}
+                    <DropdownMenuItem 
+                      onClick={goToNotificationsPage}
+                      className="cursor-pointer focus:bg-blue-50"
+                    >
+                      <Bell className="mr-2 h-4 w-4 text-dr-blue" />
+                      <span className="text-dr-blue font-medium">Centro de notificaciones</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem 
                       onClick={onLogout}
                       className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"

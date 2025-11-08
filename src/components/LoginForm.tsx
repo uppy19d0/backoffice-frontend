@@ -49,7 +49,7 @@ export function LoginForm({ onLogin, error, isLoading }: LoginFormProps) {
           <img
             src={governmentLogo}
             alt="Gobierno de la República Dominicana - Sistema Único de Beneficiarios"
-            className="mx-auto h-20 w-auto md:h-24"
+            className="mx-auto h-32 w-auto md:h-28"
           />
           <h1 className="text-[34px] font-gotham font-bold leading-tight text-dr-dark-gray md:text-[46px]">
             Sistema Único de Beneficiarios
