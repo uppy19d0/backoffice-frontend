@@ -103,7 +103,6 @@ import {
   RefreshCw,
   Download,
   FileSpreadsheet,
-  AlertTriangle,
   Bell,
   BellRing,
   Check,
@@ -695,7 +694,11 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
-              <Button variant="outline" className="h-auto p-4 border-gray-300">
+              <Button
+                variant="outline"
+                className="h-auto p-4 border-gray-300"
+                onClick={() => onNavigate?.('users')}
+              >
                 <div className="flex flex-col items-center gap-2">
                   <UserPlus className="h-6 w-6 text-dr-blue" />
                   <span className="text-sm font-medium">Crear Usuario</span>
@@ -703,7 +706,11 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
                 </div>
               </Button>
               
-              <Button variant="outline" className="h-auto p-4 border-gray-300">
+              <Button
+                variant="outline"
+                className="h-auto p-4 border-gray-300"
+                onClick={() => onNavigate?.('reports')}
+              >
                 <div className="flex flex-col items-center gap-2">
                   <FileText className="h-6 w-6 text-dr-blue" />
                   <span className="text-sm font-medium">Generar Reporte</span>
@@ -711,7 +718,11 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
                 </div>
               </Button>
               
-              <Button variant="outline" className="h-auto p-4 border-gray-300">
+              <Button
+                variant="outline"
+                className="h-auto p-4 border-gray-300"
+                onClick={() => onNavigate?.('config')}
+              >
                 <div className="flex flex-col items-center gap-2">
                   <Settings className="h-6 w-6 text-dr-blue" />
                   <span className="text-sm font-medium">Configuraciones</span>
@@ -1315,9 +1326,34 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       '2': 'review',
       '3': 'approved',
       '4': 'rejected',
+      pending: 'pending',
+      pendiente: 'pending',
+      pendientes: 'pending',
+      assigned: 'assigned',
+      asignado: 'assigned',
+      asignada: 'assigned',
+      asignadas: 'assigned',
+      review: 'review',
+      revision: 'review',
+      'en revision': 'review',
+      'en revisión': 'review',
+      approved: 'approved',
+      aprobado: 'approved',
+      aprobada: 'approved',
+      rejected: 'rejected',
+      rechazado: 'rejected',
+      rechazada: 'rejected',
     };
-    const statusStr = typeof status === 'number' ? String(status) : status;
-    return statusMap[statusStr] || statusStr;
+    const raw =
+      typeof status === 'number'
+        ? String(status)
+        : typeof status === 'string'
+          ? status.trim().toLowerCase()
+          : '';
+    if (!raw) {
+      return '';
+    }
+    return statusMap[raw] || raw;
   };
 
   // Filter requests based on user role
@@ -1431,7 +1467,13 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       return;
     }
 
-    if (!selectedRequest || !selectedRequest.id) {
+    if (!selectedRequest) {
+      setAssignDialogError('No se pudo determinar la solicitud seleccionada.');
+      return;
+    }
+
+    const requestId = resolveRequestId(selectedRequest);
+    if (!requestId) {
       setAssignDialogError('No se pudo determinar la solicitud seleccionada.');
       return;
     }
@@ -1467,7 +1509,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       let updatedRequest: RequestDto | null = null;
 
       try {
-        updatedRequest = await assignRequest(authToken, selectedRequest.id, {
+        updatedRequest = await assignRequest(authToken, requestId, {
           analystId: analystInfo.id,
           notes: trimmedNotes ? trimmedNotes : undefined,
         });
@@ -1488,12 +1530,14 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       if (updatedRequest) {
         setRequests((prev) =>
-          prev.map((req) => (req.id === updatedRequest?.id ? { ...req, ...updatedRequest } : req)),
+          prev.map((req) =>
+            resolveRequestId(req) === requestId ? { ...req, ...updatedRequest } : req,
+          ),
         );
       } else {
         setRequests((prev) =>
           prev.map((req) =>
-            req.id === selectedRequest.id
+            resolveRequestId(req) === requestId
               ? {
                   ...req,
                   status: 'assigned',
@@ -1508,22 +1552,22 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       await loadRequests();
 
-      const requestId = resolveRequestId(updatedRequest ?? selectedRequest) ?? String(selectedRequest.id ?? '');
+      const resolvedId = resolveRequestId(updatedRequest ?? selectedRequest) ?? requestId;
       const applicantName =
         updatedRequest?.applicant ?? selectedRequest.applicant ?? undefined;
 
       toast.success('Solicitud asignada correctamente', {
-        description: `${applicantName ?? `Solicitud #${requestId}`} → ${analystInfo.name}`,
+        description: `${applicantName ?? `Solicitud #${resolvedId}`} → ${analystInfo.name}`,
         duration: 4000,
       });
 
       if (isSupervisorRole || isAdminRole) {
         pushNotification({
-          id: `request-${requestId}-assigned`,
+          id: `request-${resolvedId}-assigned`,
           title: 'Solicitud asignada',
           message: applicantName
-            ? `La solicitud #${requestId} de ${applicantName} fue asignada a ${analystInfo.name}.`
-            : `La solicitud #${requestId} fue asignada a ${analystInfo.name}.`,
+            ? `La solicitud #${resolvedId} de ${applicantName} fue asignada a ${analystInfo.name}.`
+            : `La solicitud #${resolvedId} fue asignada a ${analystInfo.name}.`,
           priority: 'medium',
           type: 'request-assignment',
           targetRoles: ['Supervisor'],
@@ -1551,21 +1595,27 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   const handleUnassignRequest = async () => {
     if (!selectedRequest || !authToken) return;
+
+    const requestId = resolveRequestId(selectedRequest);
+    if (!requestId) {
+      toast.error('No se pudo determinar la solicitud seleccionada.');
+      return;
+    }
     
     setIsSubmittingAssignment(true);
     try {
-      await unassignRequest(authToken, selectedRequest.id, {
+      await unassignRequest(authToken, requestId, {
         notes: unassignNotes.trim() || undefined
       });
       
       // Update local state
       setRequests((prev: RequestDto[]) => prev.map((req: RequestDto) => 
-        req.id === selectedRequest.id 
+        resolveRequestId(req) === requestId
           ? { ...req, assignedTo: null, assignmentDate: null, assignmentNotes: null }
           : req
       ));
       
-      toast.success(`Solicitud #${selectedRequest.id} desasignada exitosamente`);
+      toast.success(`Solicitud #${requestId} desasignada exitosamente`);
       setShowUnassignModal(false);
       setUnassignNotes('');
       setSelectedRequest(null);
@@ -2931,26 +2981,151 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
     return Array.from(types);
   }, [notifications]);
 
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case 'high': return <AlertTriangle className="h-4 w-4 text-red-500" />;
-      case 'medium': return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      case 'low': return <Info className="h-4 w-4 text-blue-500" />;
-      default: return <Info className="h-4 w-4 text-gray-500" />;
+  const pendingCopy = unreadCount === 1 ? 'notificación pendiente' : 'notificaciones pendientes';
+
+  const todayCount = useMemo(() => {
+    if (notifications.length === 0) {
+      return 0;
     }
-  };
+    const today = new Date().toDateString();
+    return notifications.filter((notification) => {
+      if (!notification.createdAt) {
+        return false;
+      }
+      const date = new Date(notification.createdAt);
+      if (Number.isNaN(date.getTime())) {
+        return false;
+      }
+      return date.toDateString() === today;
+    }).length;
+  }, [notifications]);
+
+  const latestNotificationDate = useMemo(() => {
+    if (notifications.length === 0) {
+      return null;
+    }
+    let latest: Date | null = null;
+    for (const notification of notifications) {
+      if (!notification.createdAt) {
+        continue;
+      }
+      const date = new Date(notification.createdAt);
+      if (Number.isNaN(date.getTime())) {
+        continue;
+      }
+      if (!latest || date > latest) {
+        latest = date;
+      }
+    }
+    return latest;
+  }, [notifications]);
+
+  const lastUpdatedText = useMemo(() => {
+    if (!latestNotificationDate) {
+      return 'Sin registros recientes';
+    }
+    const diffMs = Date.now() - latestNotificationDate.getTime();
+    const minutes = Math.floor(diffMs / (1000 * 60));
+    if (minutes < 1) {
+      return 'Hace instantes';
+    }
+    if (minutes < 60) {
+      return `Hace ${minutes} min`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `Hace ${hours} h`;
+    }
+    const days = Math.floor(hours / 24);
+    if (days < 7) {
+      return `Hace ${days} d`;
+    }
+    return latestNotificationDate.toLocaleDateString('es-DO', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }, [latestNotificationDate]);
+
+  const summaryCards = useMemo(
+    () => [
+      {
+        key: 'unread',
+        label: 'Sin leer',
+        value: unreadCount,
+        helper: pendingCopy,
+        icon: <BellRing className="h-5 w-5 text-dr-blue" />,
+      },
+      {
+        key: 'today',
+        label: 'Hoy',
+        value: todayCount,
+        helper: 'Ingresaron hoy',
+        icon: <Calendar className="h-5 w-5 text-emerald-600" />,
+      },
+      {
+        key: 'latest',
+        label: 'Última sincronización',
+        value: lastUpdatedText,
+        helper: 'Registro más reciente',
+        icon: <RefreshCw className="h-5 w-5 text-slate-500" />,
+      },
+    ],
+    [pendingCopy, todayCount, unreadCount, lastUpdatedText],
+  );
+
+
+  const quickStatusFilters = [
+    { label: 'Todas', value: 'all' },
+    { label: 'Sin leer', value: 'unread' },
+    { label: 'Leídas', value: 'read' },
+  ];
 
   const getPriorityBadge = (priority: string) => {
     const colors = {
-      high: 'bg-red-100 text-red-800 border-red-200',
-      medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      low: 'bg-blue-100 text-blue-800 border-blue-200'
+      high: 'border-red-200 bg-red-50 text-red-700',
+      medium: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+      low: 'border-blue-200 bg-blue-50 text-blue-700'
     };
+    const baseStyles = colors[priority as keyof typeof colors] || 'border-slate-200 bg-slate-50 text-slate-700';
     return (
-      <Badge className={`${colors[priority as keyof typeof colors] || 'bg-gray-100 text-gray-800'} text-xs`}>
+      <Badge className={`${baseStyles} text-xs font-medium`}>
         {priority === 'high' ? 'Alta' : priority === 'medium' ? 'Media' : 'Baja'}
       </Badge>
     );
+  };
+
+  const getTypeConfig = (type?: string) => {
+    switch (type) {
+      case 'request':
+        return {
+          label: 'Solicitud',
+          icon: <ClipboardList className="h-4 w-4" />,
+          avatarBg: 'bg-blue-100 text-blue-700 border-blue-200',
+          badgeClass: 'border-blue-200 bg-blue-50 text-blue-700'
+        };
+      case 'request-assignment':
+        return {
+          label: 'Asignación',
+          icon: <UserCheck className="h-4 w-4" />,
+          avatarBg: 'bg-amber-100 text-amber-700 border-amber-200',
+          badgeClass: 'border-amber-200 bg-amber-50 text-amber-700'
+        };
+      case 'system':
+        return {
+          label: 'Sistema',
+          icon: <Settings className="h-4 w-4" />,
+          avatarBg: 'bg-slate-100 text-slate-700 border-slate-200',
+          badgeClass: 'border-slate-200 bg-slate-50 text-slate-700'
+        };
+      default:
+        return {
+          label: type ? type.charAt(0).toUpperCase() + type.slice(1) : 'General',
+          icon: <Bell className="h-4 w-4" />,
+          avatarBg: 'bg-gray-100 text-gray-600 border-gray-200',
+          badgeClass: 'border-gray-200 bg-gray-50 text-gray-700'
+        };
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -2974,103 +3149,151 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
     });
   };
 
+  const summaryVisuals: Record<
+    string,
+    { accent: string; border: string; iconBg: string; shadow: string; chip: string }
+  > = {
+    unread: {
+      accent: 'from-dr-blue/80 via-sky-500/70 to-indigo-500/60',
+      border: 'border-dr-blue/20',
+      iconBg: 'bg-dr-blue/10 text-dr-blue border-dr-blue/20',
+      shadow: 'shadow-blue-100/70',
+      chip: 'bg-dr-blue/10 text-dr-blue',
+    },
+    today: {
+      accent: 'from-emerald-500/70 via-teal-400/70 to-lime-400/60',
+      border: 'border-emerald-100',
+      iconBg: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      shadow: 'shadow-emerald-100/80',
+      chip: 'bg-emerald-100 text-emerald-700',
+    },
+    latest: {
+      accent: 'from-slate-400/60 via-slate-500/50 to-stone-400/50',
+      border: 'border-slate-200',
+      iconBg: 'bg-slate-100 text-slate-600 border-slate-200',
+      shadow: 'shadow-slate-200/80',
+      chip: 'bg-slate-100 text-slate-600',
+    },
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-dr-dark-gray">Notificaciones</h1>
-          <p className="text-gray-600 mt-1">
-            Gestione todas sus notificaciones del sistema
-          </p>
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-blue-50/30 to-white p-6 shadow-sm lg:p-8">
+        <div className="absolute inset-0 opacity-40">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_55%)]" />
+          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-dr-blue/5 blur-3xl" />
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refresh({ showErrors: true })}
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-          {unreadCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={markAllAsRead}
-            >
-              <CheckCheck className="h-4 w-4 mr-2" />
-              Marcar todas como leídas
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Estadísticas */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-50 p-2 rounded-full">
-                <Bell className="h-5 w-5 text-dr-blue" />
-              </div>
+        <div className="relative z-10 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-dr-blue shadow-sm">
+                <BellRing className="h-3.5 w-3.5" />
+                Centro de alertas
+              </span>
               <div>
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-xl font-bold text-dr-dark-gray">{notifications.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-red-50 p-2 rounded-full">
-                <BellRing className="h-5 w-5 text-red-500" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Sin leer</p>
-                <p className="text-xl font-bold text-red-600">{unreadCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-green-50 p-2 rounded-full">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Leídas</p>
-                <p className="text-xl font-bold text-green-600">{notifications.length - unreadCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-yellow-50 p-2 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Alta prioridad</p>
-                <p className="text-xl font-bold text-yellow-600">
-                  {notifications.filter(n => n.priority === 'high').length}
+                <h1 className="text-3xl font-semibold text-dr-dark-gray">Notificaciones</h1>
+                <p className="text-sm text-slate-600">
+                  Consulta y gestiona las notificaciones del sistema desde una sola vista.
                 </p>
               </div>
+              <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 font-semibold text-dr-dark-gray shadow-sm">
+                  {filteredNotifications.length} registradas
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 font-semibold text-dr-blue">
+                  {unreadCount} sin leer
+                </span>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refresh({ showErrors: true })}
+                disabled={isLoading}
+                className="bg-white/70 text-dr-dark-gray shadow-sm hover:bg-white"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Actualizar
+              </Button>
+              {unreadCount > 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={markAllAsRead}
+                  className="bg-dr-blue text-white shadow"
+                >
+                  <CheckCheck className="h-4 w-4" />
+                  Marcar todas como leídas
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {summaryCards.map((card) => {
+              const visuals = summaryVisuals[card.key] ?? summaryVisuals.latest;
+              return (
+                <div
+                  key={card.key}
+                  className={`group relative overflow-hidden rounded-2xl border bg-white/90 p-4 shadow-sm backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${visuals.border} ${visuals.shadow}`}
+                >
+                  <span
+                    className={`pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-20 bg-gradient-to-br ${visuals.accent}`}
+                  />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="space-y-1.5">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{card.label}</p>
+                      <p className="text-3xl font-semibold text-dr-dark-gray">{card.value}</p>
+                      <p className="text-xs text-slate-500">{card.helper}</p>
+                    </div>
+                    <div className={`rounded-2xl border p-3 ${visuals.iconBg}`}>
+                      {card.icon}
+                    </div>
+                  </div>
+                  <div className="relative mt-4">
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${visuals.chip}`}>
+                      Resumen
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid gap-4 md:grid-cols-5">
+      <Card className="border border-slate-200 bg-white shadow-sm">
+        <CardContent className="space-y-6 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-600">Filtros rápidos</p>
+              <p className="text-xs text-slate-500">Aplica el estado que necesites con un clic.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {quickStatusFilters.map((filter) => {
+                const isActive = statusFilter === filter.value;
+                return (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setStatusFilter(filter.value)}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'border-dr-blue bg-white text-dr-blue shadow'
+                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator className="bg-slate-200" />
+
+          <div className="grid gap-6 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="search">Buscar</Label>
               <div className="relative">
@@ -3080,7 +3303,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                   placeholder="Buscar notificaciones..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="border-slate-200 bg-white pl-10 text-sm focus-visible:ring-2 focus-visible:ring-dr-blue"
                 />
               </div>
             </div>
@@ -3088,17 +3311,23 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
             <div className="space-y-2">
               <Label htmlFor="type">Tipo</Label>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger id="type">
+                <SelectTrigger
+                  id="type"
+                  className="border-slate-200 bg-white text-sm focus:ring-2 focus:ring-dr-blue"
+                >
                   <SelectValue placeholder="Todos los tipos" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los tipos</SelectItem>
-                  {notificationTypes.map(type => (
+                  {notificationTypes.map((type) => (
                     <SelectItem key={type} value={type}>
-                      {type === 'request' ? 'Solicitudes' : 
-                       type === 'system' ? 'Sistema' :
-                       type === 'request-assignment' ? 'Asignaciones' :
-                       type.charAt(0).toUpperCase() + type.slice(1)}
+                      {type === 'request'
+                        ? 'Solicitudes'
+                        : type === 'system'
+                          ? 'Sistema'
+                          : type === 'request-assignment'
+                            ? 'Asignaciones'
+                            : type.charAt(0).toUpperCase() + type.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -3108,7 +3337,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
             <div className="space-y-2">
               <Label htmlFor="priority">Prioridad</Label>
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger id="priority">
+                <SelectTrigger
+                  id="priority"
+                  className="border-slate-200 bg-white text-sm focus:ring-2 focus:ring-dr-blue"
+                >
                   <SelectValue placeholder="Todas las prioridades" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3121,23 +3353,12 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="status">Estado</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger id="status">
-                  <SelectValue placeholder="Todos los estados" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los estados</SelectItem>
-                  <SelectItem value="unread">Sin leer</SelectItem>
-                  <SelectItem value="read">Leídas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="date">Fecha</Label>
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger id="date">
+                <SelectTrigger
+                  id="date"
+                  className="border-slate-200 bg-white text-sm focus:ring-2 focus:ring-dr-blue"
+                >
                   <SelectValue placeholder="Todas las fechas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3153,9 +3374,9 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
       </Card>
 
       {/* Lista de notificaciones */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+      <Card className="border border-slate-200 bg-white shadow-sm">
+        <CardHeader className="border-b border-slate-100 pb-4">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg font-semibold text-dr-dark-gray">
             <span>Notificaciones ({filteredNotifications.length})</span>
             {error && (
               <Badge variant="destructive" className="text-xs">
@@ -3166,77 +3387,101 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-8 text-center text-gray-500">
-              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
+            <div className="p-10 text-center text-sm text-slate-500">
+              <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-dr-blue" />
               Cargando notificaciones...
             </div>
           ) : filteredNotifications.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <Bell className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+            <div className="p-10 text-center text-sm text-slate-500">
+              <Bell className="mx-auto mb-3 h-10 w-10 text-slate-300" />
               No se encontraron notificaciones con los filtros aplicados
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
-              {filteredNotifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-4 hover:bg-gray-50 transition-colors ${
-                    !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {getPriorityIcon(notification.priority)}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className={`text-sm font-medium ${
-                              !notification.read ? 'text-dr-dark-gray' : 'text-gray-700'
-                            }`}>
-                              {notification.title}
-                            </h3>
-                            {!notification.read && (
-                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <div className="relative p-4 md:p-6">
+              <div className="absolute left-6 top-6 bottom-6 hidden md:block border-l border-dashed border-slate-200" />
+              <div className="space-y-6">
+                {filteredNotifications.map((notification) => {
+                  const typeConfig = getTypeConfig(notification.type);
+                  const isUnread = !notification.read;
+                  return (
+                    <div key={notification.id} className="relative md:pl-10">
+                      <span
+                        className={`absolute left-6 top-6 hidden h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white shadow-md md:block ${
+                          isUnread ? 'bg-blue-500' : 'bg-slate-300'
+                        }`}
+                      />
+                      <div
+                        className={`rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+                          isUnread
+                            ? 'border-blue-200 bg-blue-50/70 shadow-blue-100 hover:shadow-lg'
+                            : 'border-slate-100 bg-white hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                          <div className="flex flex-1 gap-4">
+                            <div
+                              className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${typeConfig.avatarBg}`}
+                            >
+                              {typeConfig.icon}
+                            </div>
+                            <div className="min-w-0 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs font-medium uppercase ${typeConfig.badgeClass}`}
+                                >
+                                  {typeConfig.label}
+                                </Badge>
+                                {isUnread && (
+                                  <Badge className="border-transparent bg-dr-blue/10 text-[11px] font-semibold uppercase tracking-wide text-dr-blue">
+                                    Nuevo
+                                  </Badge>
+                                )}
+                              </div>
+                              <h3 className="text-base font-semibold text-dr-dark-gray">
+                                {notification.title}
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                {notification.message}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-3 text-left md:text-right">
+                            <span className="flex items-center gap-2 text-xs text-gray-500 md:justify-end">
+                              <Clock className="h-3.5 w-3.5" />
+                              {formatDate(notification.createdAt)}
+                            </span>
+                            <div className="flex flex-wrap gap-2 md:justify-end">
+                              {getPriorityBadge(notification.priority)}
+                              <Badge
+                                className={`text-xs font-medium ${
+                                  notification.read
+                                    ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                    : 'border-blue-200 bg-blue-50 text-blue-700'
+                                }`}
+                              >
+                                {notification.read ? 'Leída' : 'Sin leer'}
+                              </Badge>
+                            </div>
+                            {isUnread && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => markAsRead(notification.id)}
+                                className="border-blue-200 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                                title="Marcar como leída"
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                Marcar como leída
+                              </Button>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 mb-2">
-                            {notification.message}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>{formatDate(notification.createdAt)}</span>
-                            <span>•</span>
-                            {getPriorityBadge(notification.priority)}
-                            <span>•</span>
-                            <Badge variant="outline" className="text-xs">
-                              {notification.type === 'request' ? 'Solicitud' : 
-                               notification.type === 'system' ? 'Sistema' :
-                               notification.type === 'request-assignment' ? 'Asignación' :
-                               notification.type}
-                            </Badge>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          {!notification.read && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => markAsRead(notification.id)}
-                              className="text-blue-600 hover:bg-blue-50"
-                              title="Marcar como leída"
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>
