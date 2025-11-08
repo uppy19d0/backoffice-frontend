@@ -152,11 +152,13 @@ const SidebarItemComponent: React.FC<SidebarItemComponentProps> = ({
         />
         
         {/* Label */}
-        {!isCollapsed && (
-          <span className="sidebar-nav-label">
-            {item.label}
-          </span>
-        )}
+        <span
+          className={`sidebar-nav-label ${
+            isCollapsed ? 'sidebar-nav-label--collapsed' : ''
+          }`}
+        >
+          {item.label}
+        </span>
         
         {/* Chevron para submenú */}
         {!isCollapsed && item.hasSubmenu && (

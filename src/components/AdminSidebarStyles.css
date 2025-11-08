@@ -129,7 +129,11 @@
 /* Variante colapsada */
 .sidebar-nav-item--collapsed {
   justify-content: center;
-  gap: 0;
+  gap: 6px;
+  flex-direction: column;
+  text-align: center;
+  padding-right: 10px !important;
+  padding-left: 10px !important;
 }
 
 /* Ícono del item */
@@ -148,6 +152,16 @@
   font-size: 14px;
   line-height: 16px;
   color: currentColor;
+}
+
+.sidebar-nav-label--collapsed {
+  flex: none;
+  width: 100%;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #AFC2DA;
 }
 
 .sidebar-nav-label--submenu {

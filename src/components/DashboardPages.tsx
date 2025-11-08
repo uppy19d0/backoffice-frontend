@@ -1654,70 +1654,246 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     ? requests.filter((req) => normalizeStatus(req.status) === 'pending' && !resolveRequestAssigneeName(req)).length 
     : 0;
 
+  const statusSummary = useMemo(() => {
+    const summary = {
+      total: requests.length,
+      pending: 0,
+      assigned: 0,
+      review: 0,
+      approved: 0,
+      rejected: 0,
+      highPriority: 0,
+    };
+
+    for (const request of requests) {
+      const statusKey = normalizeStatus(request.status);
+      if (statusKey in summary && statusKey !== 'total') {
+        summary[statusKey as keyof typeof summary] += 1;
+      }
+      if (request.priority === 'high') {
+        summary.highPriority += 1;
+      }
+    }
+
+    return summary;
+  }, [requests]);
+
+  const summaryCards = useMemo(
+    () => [
+      {
+        key: 'total',
+        label: 'Solicitudes registradas',
+        value: statusSummary.total,
+        helper: 'Historial completo',
+        accent: 'from-sky-500 via-blue-500 to-indigo-500',
+      },
+      {
+        key: 'in-progress',
+        label: 'En proceso',
+        value: statusSummary.pending + statusSummary.review,
+        helper: 'Pendientes y en revisión',
+        accent: 'from-amber-400 via-orange-500 to-pink-500',
+      },
+      {
+        key: 'high',
+        label: 'Prioridad alta',
+        value: statusSummary.highPriority,
+        helper: 'Requieren seguimiento',
+        accent: 'from-red-500 via-rose-500 to-fuchsia-500',
+      },
+    ],
+    [statusSummary],
+  );
+
+  const quickStatusFilters = [
+    { label: 'Todas', value: 'all' },
+    { label: 'Pendientes', value: 'pending' },
+    { label: 'Asignadas', value: 'assigned' },
+    { label: 'En revisión', value: 'review' },
+    { label: 'Aprobadas', value: 'approved' },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-dr-dark-gray">
-            {isSupervisorRole 
-              ? 'Gestión de Solicitudes' 
-              : isAnalystRole
-              ? 'Mis Solicitudes Asignadas'
-              : 'Solicitudes del Sistema'
-            }
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {isSupervisorRole 
-              ? 'Asigne solicitudes a analistas y supervise el progreso' 
-              : isAnalystRole
-              ? 'Revise y procese las solicitudes que le han sido asignadas'
-              : 'Monitoree todas las solicitudes del sistema'
-            }
-          </p>
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-blue-50/30 to-white p-6 shadow-sm">
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(15,118,255,0.12),transparent_65%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.08),transparent_60%)]" />
         </div>
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-dr-blue shadow-sm">
+              <ClipboardList className="h-3.5 w-3.5" />
+              Centro de solicitudes
+            </span>
+            <div>
+              <h1 className="text-3xl font-semibold text-dr-dark-gray">
+                {isSupervisorRole
+                  ? 'Gestión de Solicitudes'
+                  : isAnalystRole
+                    ? 'Mis Solicitudes Asignadas'
+                    : 'Solicitudes del Sistema'}
+              </h1>
+              <p className="text-sm text-slate-600">
+                {isSupervisorRole
+                  ? 'Coordina asignaciones y haz seguimiento al flujo operativo.'
+                  : isAnalystRole
+                    ? 'Revisa, documenta y actualiza cada caso asignado en tiempo real.'
+                    : 'Monitorea el desempeño global y detecta cuellos de botella.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 font-semibold text-dr-dark-gray shadow-sm">
+                {statusSummary.total} registradas
+              </span>
+              {(isSupervisorRole || isAdminRole) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-700 shadow-sm">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {unassignedCount} sin asignar
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-white/80 text-dr-dark-gray shadow-sm hover:bg-white"
+              onClick={() => {
+                void loadRequests();
+              }}
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+            {(isSupervisorRole || isAdminRole) && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-dr-blue text-white shadow"
+                onClick={() => {
+                  const firstPending = requests.find(
+                    (request) =>
+                      normalizeStatus(request.status) === 'pending' &&
+                      !resolveRequestAssigneeName(request),
+                  );
+                  if (firstPending) {
+                    handleAssignRequest(firstPending);
+                  } else {
+                    toast.info('No hay solicitudes pendientes para asignar.');
+                  }
+                }}
+              >
+                <UserPlus className="h-4 w-4" />
+                Asignar pendiente
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
 
-        {/* Unassigned Requests Alert for Managers */}
-        {(isSupervisorRole || isAdminRole) && unassignedCount > 0 && (
-          <Alert className="bg-amber-50 border-amber-200">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800">
-              Hay {unassignedCount} solicitud{unassignedCount !== 1 ? 'es' : ''} pendiente{unassignedCount !== 1 ? 's' : ''} de asignación
-            </AlertDescription>
-          </Alert>
-        )}
+      <div className="grid gap-4 md:grid-cols-3">
+        {summaryCards.map((card) => (
+          <div
+            key={card.key}
+            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm"
+          >
+            <span className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${card.accent}`} />
+            <p className="text-xs uppercase tracking-wide text-slate-500">{card.label}</p>
+            <p className="text-3xl font-semibold text-dr-dark-gray">{card.value}</p>
+            <p className="text-xs text-slate-500">{card.helper}</p>
+          </div>
+        ))}
       </div>
 
       {!(isSupervisorRole || isAdminRole) && (
         <Alert className="border-gray-200 bg-gray-50">
           <Info className="h-4 w-4 text-gray-600" />
           <AlertDescription className="text-gray-700">
-            Los analistas pueden revisar y actualizar sus solicitudes asignadas, pero la asignación inicial
-            sólo la realizan supervisores o administradores. Si necesita reasignar un caso, comuníquelo a su supervisor.
+            Los analistas pueden revisar y actualizar sus solicitudes asignadas, pero la asignación
+            inicial sólo la realizan supervisores o administradores. Si necesita reasignar un caso,
+            comuníquelo a su supervisor.
           </AlertDescription>
         </Alert>
       )}
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
+      <Card className="border-none bg-gradient-to-br from-white via-slate-50 to-white shadow-xl ring-1 ring-slate-200/70">
+        <CardContent className="space-y-6 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-dr-blue">
+                Filtros rápidos
+              </p>
+              <p className="text-base font-semibold text-dr-dark-gray">
+                Afina la vista de solicitudes en segundos
+              </p>
+              <p className="text-xs text-slate-500">
+                Combina búsqueda, estado y prioridad para encontrar el caso indicado.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {quickStatusFilters.map((filter) => {
+                const isActive = statusFilter === filter.value;
+                return (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setStatusFilter(filter.value)}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-all ${
+                      isActive
+                        ? 'border-transparent bg-dr-blue text-white shadow-lg shadow-dr-blue/30'
+                        : 'border-white/70 bg-white/70 text-slate-500 hover:bg-white'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
+              {(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-500 hover:text-dr-blue"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('all');
+                    setPriorityFilter('all');
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Limpiar
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-sm">
+              <Label htmlFor="search" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Buscar por nombre, cédula o ID de solicitud..."
+                  id="search"
+                  placeholder="Nombre, cédula o ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="border-none bg-transparent pl-10 text-sm text-dr-dark-gray focus-visible:ring-2 focus-visible:ring-dr-blue"
                 />
               </div>
             </div>
-            
-            <div className="flex gap-2">
+
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-sm">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Estado
+              </Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Estado" />
+                <SelectTrigger className="border-none bg-transparent text-sm text-dr-dark-gray focus:ring-2 focus:ring-dr-blue">
+                  <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
@@ -1728,10 +1904,15 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   <SelectItem value="rejected">Rechazado</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
 
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-sm">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Prioridad
+              </Label>
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Prioridad" />
+                <SelectTrigger className="border-none bg-transparent text-sm text-dr-dark-gray focus:ring-2 focus:ring-dr-blue">
+                  <SelectValue placeholder="Todas las prioridades" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
@@ -3095,6 +3276,32 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
     );
   };
 
+  const formatNotificationTypeLabel = (type?: string) => {
+    const normalized =
+      type?.toLowerCase().replace(/\s+/g, '-').replace(/_/g, '-') ?? 'general';
+    switch (normalized) {
+      case 'request':
+        return 'Solicitudes';
+      case 'request-assignment':
+        return 'Asignaciones';
+      case 'request-unassigned':
+        return 'Asignación pendiente';
+      case 'system':
+        return 'Sistema';
+      case 'alert':
+        return 'Alertas';
+      case 'approval':
+        return 'Aprobaciones';
+      case 'assignment':
+        return 'Asignaciones';
+      default:
+        return normalized
+          .split('-')
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+    }
+  };
+
   const getTypeConfig = (type?: string) => {
     const normalizedType =
       type?.toLowerCase().replace(/\s+/g, '-').replace(/_/g, '-') ?? 'general';
@@ -3116,7 +3323,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
         };
       case 'request-unassigned':
         return {
-          label: 'Solicitud sin asignar',
+          label: 'Asignación pendiente',
           icon: <UserMinus className="h-4 w-4" />,
           avatarBg: 'bg-rose-100 text-rose-700 border-rose-200',
           badgeClass: 'border-rose-200 bg-rose-50 text-rose-700'
@@ -3129,13 +3336,13 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
           badgeClass: 'border-slate-200 bg-slate-50 text-slate-700'
         };
       default:
+        const friendlyName =
+          normalizedType
+            .split(/[\s\-]+/)
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ') || 'General';
         return {
-          label: type
-            ? type
-                .split(/[\s_\-]+/)
-                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ')
-            : 'General',
+          label: friendlyName,
           icon: <Bell className="h-4 w-4" />,
           avatarBg: 'bg-gray-100 text-gray-600 border-gray-200',
           badgeClass: 'border-gray-200 bg-gray-50 text-gray-700'
@@ -3343,13 +3550,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                   <SelectItem value="all">Todos los tipos</SelectItem>
                   {notificationTypes.map((type) => (
                     <SelectItem key={type} value={type}>
-                      {type === 'request'
-                        ? 'Solicitudes'
-                        : type === 'system'
-                          ? 'Sistema'
-                          : type === 'request-assignment'
-                            ? 'Asignaciones'
-                            : type.charAt(0).toUpperCase() + type.slice(1)}
+                      {formatNotificationTypeLabel(type)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -326,7 +326,7 @@ export function DashboardLayout({
                 <div className="absolute -inset-1 bg-gradient-to-r from-white/30 via-white/10 to-white/30 rounded-2xl blur-sm group-data-[collapsible=icon]:rounded-xl"></div>
                 
                 {/* Contenedor principal del logo */}
-                <div className="relative bg-gradient-to-br from-white via-white to-gray-50/95 p-4 group-data-[collapsible=icon]:p-3 rounded-2xl group-data-[collapsible=icon]:rounded-xl shadow-2xl border-2 border-white/40 backdrop-blur-sm">
+                <div className="relative bg-gradient-to-br from-white via-white to-gray-50/95 p-4 group-data-[collapsible=icon]:p-2 rounded-2xl group-data-[collapsible=icon]:rounded-xl shadow-2xl border-2 border-white/40 backdrop-blur-sm group-data-[collapsible=icon]:scale-90">
                   {/* Efecto de cristal interno */}
                   <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-2xl group-data-[collapsible=icon]:rounded-xl pointer-events-none"></div>
                   
@@ -335,7 +335,7 @@ export function DashboardLayout({
                     <img
                       src={governmentLogo}
                       alt="SIUBEN - Sistema Único de Beneficiarios República Dominicana"
-                      className="h-24 group-data-[collapsible=icon]:h-24 w-auto max-w-none transition-all duration-300 filter drop-shadow-md group-data-[collapsible=icon]:drop-shadow-sm"
+                      className="h-20 w-auto max-w-none transition-all duration-300 filter drop-shadow-md group-data-[collapsible=icon]:h-10"
                       style={{
                         imageRendering: 'crisp-edges',
                         backfaceVisibility: 'hidden',
@@ -380,6 +380,13 @@ export function DashboardLayout({
                     Sistema Gubernamental Oficial
                   </p>
                 </div>
+              </div>
+
+              <div className="hidden flex-col items-center text-center text-white group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:gap-1">
+                <p className="text-sm font-gotham font-bold tracking-wide leading-none">SIUBEN</p>
+                <span className="rounded-full bg-white/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/80">
+                  RD
+                </span>
               </div>
             </div>
           </SidebarHeader>
@@ -446,6 +453,9 @@ export function DashboardLayout({
                                   </>
                                 )}
                               </div>
+                              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                                {item.label}
+                              </span>
                             </div>
                             <div className="relative flex w-full items-center gap-3 group-data-[collapsible=icon]:hidden">
                               <div
@@ -525,7 +535,10 @@ export function DashboardLayout({
                                 : "text-gray-600 group-hover:text-dr-dark-gray group-hover:scale-105"
                             }`}
                           />
-                          <span className="relative z-10 group-data-[collapsible=icon]:sr-only">
+                          <span className="relative z-10 font-gotham group-data-[collapsible=icon]:hidden">
+                            {item.label}
+                          </span>
+                          <span className="relative z-10 hidden w-full text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 group-data-[collapsible=icon]:block">
                             {item.label}
                           </span>
                           
