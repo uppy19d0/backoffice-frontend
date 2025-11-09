@@ -1,31 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-interface CurrentUser {
-  username: string;
-  email?: string | null;
-  name: string;
-  role: string;
-  roleLevel: 'Admin' | 'Supervisor' | 'Analyst';
-  id?: string | null;
-  departmentName?: string | null;
-  departmentId?: string | null;
-  permissions: {
-    canCreateUsers: boolean;
-    canApproveRequests: boolean;
-    canReviewRequests: boolean;
-    canViewReports: boolean;
-    canManageBeneficiaries: boolean;
-  };
-}
-
-interface PageProps {
-  currentUser?: CurrentUser | null;
-  authToken?: string | null;
-  onNavigate?: (page: string) => void;
-}
-
 import { 
-  getRequests, 
+  getRequests,
+  getRequestById,
   assignRequest,
   getAssignableUsers,
   unassignRequest,
@@ -50,6 +26,30 @@ import {
   RequestDto,
   AssignableUserDto
 } from '../services/api';
+
+interface CurrentUser {
+  username: string;
+  email?: string | null;
+  name: string;
+  role: string;
+  roleLevel: 'Admin' | 'Supervisor' | 'Analyst';
+  id?: string | null;
+  departmentName?: string | null;
+  departmentId?: string | null;
+  permissions: {
+    canCreateUsers: boolean;
+    canApproveRequests: boolean;
+    canReviewRequests: boolean;
+    canViewReports: boolean;
+    canManageBeneficiaries: boolean;
+  };
+}
+
+interface PageProps {
+  currentUser?: CurrentUser | null;
+  authToken?: string | null;
+  onNavigate?: (page: string) => void;
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -1440,9 +1440,18 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     return { outOfTeamAnalystsCount: outCount, teamAnalystsCount: analysts.length - outCount };
   }, [analysts, isAdminRole]);
 
-  const handleViewRequest = (request: RequestDto) => {
-    setSelectedRequest(request);
-    setShowViewModal(true);
+  const handleViewRequest = async (request: RequestDto) => {
+    try {
+      // Cargar datos completos de la solicitud individual (con beneficiary y padronData)
+      const fullRequest = await getRequestById(authToken, request.id!);
+      setSelectedRequest(fullRequest);
+      setShowViewModal(true);
+    } catch (error) {
+      console.error('Error loading request details:', error);
+      // Si falla, usar los datos básicos que ya tenemos
+      setSelectedRequest(request);
+      setShowViewModal(true);
+    }
   };
 
   const handleAssignRequest = (request: RequestDto) => {
@@ -2347,209 +2356,508 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       {/* View Request Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-dr-blue" />
-              Detalles de la Solicitud #{selectedRequest?.id}
-            </DialogTitle>
-            <DialogDescription>
-              Información completa de la solicitud de {selectedRequest?.applicant}
-            </DialogDescription>
+        <DialogContent className="max-w-7xl max-h-[90vh] p-0 gap-0 flex flex-col">
+          {/* Header - Fixed */}
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200 flex-shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-dr-blue to-dr-blue-light flex items-center justify-center shadow-sm">
+                <ClipboardList className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-xl font-bold text-dr-dark-gray truncate">
+                  Solicitud #{selectedRequest?.id?.substring(0, 8)}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-gray-600 truncate">
+                  {selectedRequest?.requestTypeName || selectedRequest?.type || 'Solicitud'} {selectedRequest?.beneficiary && `• ${selectedRequest.beneficiary.firstName} ${selectedRequest.beneficiary.lastName}`}
+                </DialogDescription>
+              </div>
+              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  {selectedRequest && getStatusBadge(selectedRequest.status)}
+                  {selectedRequest?.priority && getPriorityBadge(selectedRequest.priority)}
+                </div>
+                {selectedRequest?.submittedAt && (
+                  <span className="text-xs text-gray-500">
+                    {new Date(selectedRequest.submittedAt).toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+                {!selectedRequest?.submittedAt && selectedRequest?.date && (
+                  <span className="text-xs text-gray-500">
+                    {selectedRequest.date}
+                  </span>
+                )}
+              </div>
+            </div>
           </DialogHeader>
           
           {selectedRequest && (
-            <div className="space-y-6">
-              {/* Request Status and Priority */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  {getStatusBadge(selectedRequest.status)}
-                  {getPriorityBadge(selectedRequest.priority)}
-                  <span className="text-sm text-gray-600">
-                    Recibida el {selectedRequest.date}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getRequestTypeIcon(selectedRequest.type)}
-                  <span className="text-sm font-medium">{getRequestTypeName(selectedRequest.type)}</span>
-                </div>
-              </div>
-
-              {/* Applicant Information */}
-              <div>
-                <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Información del Solicitante
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Nombre Completo</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray font-medium">{selectedRequest.applicant}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Cédula</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray font-medium">{selectedRequest.cedula}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Teléfono</Label>
-                    <div className="p-3 bg-gray-50 rounded-md flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-gray-500" />
-                      <p className="text-dr-dark-gray">{selectedRequest.phone}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Email</Label>
-                    <div className="p-3 bg-gray-50 rounded-md flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-500" />
-                      <p className="text-dr-dark-gray">{selectedRequest.email}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 col-span-2">
-                    <Label className="text-sm font-medium text-gray-600">Dirección</Label>
-                    <div className="p-3 bg-gray-50 rounded-md flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-gray-500" />
-                      <p className="text-dr-dark-gray">{selectedRequest.address}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Request Details */}
-              <div>
-                <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Detalles de la Solicitud
-                </h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Razón de la Solicitud</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray font-medium">{selectedRequest.reason}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Descripción Detallada</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray">{selectedRequest.description}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-600">Miembros del Hogar</Label>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-dr-dark-gray font-medium">{selectedRequest.householdSize} personas</p>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-600">Ingresos Mensuales</Label>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-dr-dark-gray font-medium">{selectedRequest.monthlyIncome}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Documents */}
-              <div>
-                <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Documentos Adjuntos
-                </h3>
-                <div className="grid grid-cols-1 gap-2">
-                  {selectedRequest.documents?.map((doc: any, index: number) => {
-                    const docName = typeof doc === 'string' ? doc : doc?.fileName || 'Documento sin nombre';
-                    return (
-                      <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
-                        <FileText className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-dr-dark-gray">{docName}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Assignment Info */}
-              {selectedRequest.assignedTo && (
-                <div>
-                  <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                    <UserCheck className="h-5 w-5" />
-                    Información de Asignación
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-600">Asignado a</Label>
-                      <div className="p-3 bg-blue-50 rounded-md">
-                        <p className="text-dr-blue font-medium">{selectedRequest.assignedTo}</p>
-                      </div>
-                    </div>
-                    
-                    {selectedRequest.reviewedBy && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-600">Revisado por</Label>
-                        <div className="p-3 bg-green-50 rounded-md">
-                          <p className="text-green-700 font-medium">{selectedRequest.reviewedBy}</p>
-                        </div>
-                      </div>
+            <Tabs defaultValue="solicitud" className="flex-1 flex flex-col min-h-0">
+              {/* Tabs Navigation - Fixed */}
+              <div className="flex-shrink-0 bg-white border-b px-6 pt-4 pb-2">
+                <TabsList className="inline-flex h-10 items-center justify-start gap-1 bg-transparent w-full border-b-0 p-0">
+                  <TabsTrigger 
+                    value="solicitud" 
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border-b-2 border-transparent rounded-t-md data-[state=active]:border-dr-blue data-[state=active]:text-dr-blue data-[state=active]:bg-blue-50/50 transition-all hover:bg-gray-50"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span className="hidden sm:inline">Solicitud</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="beneficiario" 
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border-b-2 border-transparent rounded-t-md data-[state=active]:border-dr-blue data-[state=active]:text-dr-blue data-[state=active]:bg-blue-50/50 transition-all hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent" 
+                    disabled={!selectedRequest.beneficiary}
+                  >
+                    <User className="h-4 w-4" />
+                    <span className="hidden sm:inline">Beneficiario</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="hogar" 
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border-b-2 border-transparent rounded-t-md data-[state=active]:border-dr-blue data-[state=active]:text-dr-blue data-[state=active]:bg-blue-50/50 transition-all hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent" 
+                    disabled={!selectedRequest.beneficiary?.padronData?.found}
+                  >
+                    <Home className="h-4 w-4" />
+                    <span className="hidden sm:inline">Jefe de Hogar</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="miembros" 
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border-b-2 border-transparent rounded-t-md data-[state=active]:border-dr-blue data-[state=active]:text-dr-blue data-[state=active]:bg-blue-50/50 transition-all hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent" 
+                    disabled={!selectedRequest.beneficiary?.padronData?.records?.length}
+                  >
+                    <Users className="h-4 w-4" />
+                    <span className="hidden sm:inline">Miembros</span>
+                    {selectedRequest.beneficiary?.padronData?.records?.length > 0 && (
+                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
+                        {selectedRequest.beneficiary.padronData.records.length}
+                      </Badge>
                     )}
-                  </div>
-                </div>
-              )}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
-              {/* Action Buttons for Analysts */}
-              {isAnalystRole && selectedRequest.assignedTo === currentUser.name && 
-               selectedRequest.status === 'assigned' && (
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button
-                    onClick={() => {
-                      handleUpdateRequestStatus(selectedRequest.id, 'review');
-                      setShowViewModal(false);
-                    }}
-                    className="bg-dr-blue hover:bg-dr-blue-dark"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Iniciar Revisión
-                  </Button>
-                  
-                  <Button
-                    onClick={() => {
-                      handleUpdateRequestStatus(selectedRequest.id, 'approved');
-                      setShowViewModal(false);
-                    }}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Aprobar
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      handleUpdateRequestStatus(selectedRequest.id, 'rejected');
-                      setShowViewModal(false);
-                    }}
-                    className="text-red-600 border-red-600 hover:bg-red-50"
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Rechazar
-                  </Button>
-                </div>
-              )}
+              {/* Tab: Solicitud */}
+              <TabsContent value="solicitud" className="flex-1 overflow-y-auto px-6 py-6 space-y-5 m-0 focus-visible:outline-none focus-visible:ring-0">
+                  {/* Información de la Solicitud */}
+                  <Card className="border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-white pb-4">
+                      <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                        <ClipboardList className="h-5 w-5 text-dr-blue" />
+                        Información de la Solicitud
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Tipo de Solicitud</p>
+                          <p className="text-base text-dr-dark-gray font-semibold">
+                            {selectedRequest.requestTypeName || selectedRequest.requestTypeCode || getRequestTypeName(selectedRequest.type) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Estado</p>
+                          {getStatusBadge(selectedRequest.status)}
+                        </div>
+                        {selectedRequest.priority && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Prioridad</p>
+                            {getPriorityBadge(selectedRequest.priority)}
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Fecha de Recepción</p>
+                          <p className="text-base text-dr-dark-gray font-medium">
+                            {selectedRequest.submittedAt ? new Date(selectedRequest.submittedAt).toLocaleString('es-DO') : (selectedRequest.date || '—')}
+                          </p>
+                        </div>
+                        {selectedRequest.externalReference && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Referencia Externa</p>
+                            <p className="text-base text-dr-dark-gray font-mono bg-gray-50 px-3 py-2 rounded-md border border-gray-200">
+                              {selectedRequest.externalReference}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Notas */}
+                  {(selectedRequest.notes || selectedRequest.reason) && (
+                    <Card className="border-amber-200 shadow-sm hover:shadow-md transition-shadow">
+                      <CardHeader className="bg-gradient-to-r from-amber-50 to-white pb-4">
+                        <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-amber-600" />
+                          {selectedRequest.notes ? 'Notas de la Solicitud' : 'Razón de la Solicitud'}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <div className="text-base text-gray-700 bg-amber-50 border border-amber-200 p-4 rounded-lg whitespace-pre-wrap leading-relaxed">
+                          {selectedRequest.notes || selectedRequest.reason}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Detalles adicionales */}
+                  {(selectedRequest.description || selectedRequest.householdSize || selectedRequest.monthlyIncome) && (
+                    <Card className="border-gray-200 shadow-sm">
+                      <CardHeader className="bg-gradient-to-r from-green-50 to-white pb-3">
+                        <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-green-600" />
+                          Detalles Adicionales
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="space-y-4">
+                          {selectedRequest.description && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-bold uppercase text-gray-600">Descripción</p>
+                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                                {selectedRequest.description}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            {selectedRequest.householdSize && (
+                              <div className="space-y-1">
+                                <p className="text-xs font-bold uppercase text-gray-600">Miembros del Hogar</p>
+                                <p className="text-sm text-dr-dark-gray font-medium">
+                                  {selectedRequest.householdSize} personas
+                                </p>
+                              </div>
+                            )}
+                            
+                            {selectedRequest.monthlyIncome && (
+                              <div className="space-y-1">
+                                <p className="text-xs font-bold uppercase text-gray-600">Ingresos Mensuales</p>
+                                <p className="text-sm text-dr-dark-gray font-medium">
+                                  {selectedRequest.monthlyIncome}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Documentos */}
+                  {selectedRequest.documents && selectedRequest.documents.length > 0 && (
+                    <Card className="border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+                      <CardHeader className="bg-gradient-to-r from-orange-50 to-white pb-4">
+                        <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <Upload className="h-5 w-5 text-orange-600" />
+                          Documentos Adjuntos ({selectedRequest.documents.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <div className="space-y-3">
+                          {selectedRequest.documents.map((doc: any, index: number) => {
+                            const docName = typeof doc === 'string' ? doc : (doc?.fileName || 'Documento sin nombre');
+                            const docSize = typeof doc === 'object' && doc?.fileSizeBytes ? `${(doc.fileSizeBytes / 1024).toFixed(1)} KB` : '';
+                            return (
+                              <div key={index} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-orange-300 hover:bg-orange-50/30 transition-all">
+                                <div className="flex items-center gap-3">
+                                  <FileText className="h-5 w-5 text-orange-600" />
+                                  <span className="text-base text-dr-dark-gray font-medium">{docName}</span>
+                                </div>
+                                {docSize && (
+                                  <span className="text-sm text-gray-500 font-medium">{docSize}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Asignación */}
+                  {(selectedRequest.assignedAnalystName || selectedRequest.assignedByName || selectedRequest.assignedTo) && (
+                    <Card className="border-indigo-200 shadow-sm hover:shadow-md transition-shadow">
+                      <CardHeader className="bg-gradient-to-r from-indigo-50 to-white pb-4">
+                        <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <UserCheck className="h-5 w-5 text-indigo-600" />
+                          Información de Asignación
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {(selectedRequest.assignedAnalystName || selectedRequest.assignedTo) && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-bold uppercase text-gray-600">Asignado a</p>
+                              <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                                <p className="text-dr-blue font-medium">{selectedRequest.assignedAnalystName || selectedRequest.assignedTo}</p>
+                              </div>
+                            </div>
+                          )}
+                          {(selectedRequest.assignedByName || selectedRequest.reviewedBy) && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-bold uppercase text-gray-600">{selectedRequest.assignedByName ? 'Asignado por' : 'Revisado por'}</p>
+                              <div className="p-3 bg-green-50 rounded-md border border-green-200">
+                                <p className="text-green-700 font-medium">{selectedRequest.assignedByName || selectedRequest.reviewedBy}</p>
+                              </div>
+                            </div>
+                          )}
+                          {selectedRequest.assignedAt && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-bold uppercase text-gray-600">Fecha de Asignación</p>
+                              <p className="text-sm text-dr-dark-gray">
+                                {new Date(selectedRequest.assignedAt).toLocaleString('es-DO')}
+                              </p>
+                            </div>
+                          )}
+                          {selectedRequest.assignmentNotes && (
+                            <div className="space-y-1 sm:col-span-2">
+                              <p className="text-xs font-bold uppercase text-gray-600">Notas de Asignación</p>
+                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                                {selectedRequest.assignmentNotes}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+
+              {/* Tab: Beneficiario */}
+              <TabsContent value="beneficiario" className="flex-1 overflow-y-auto px-6 py-6 m-0 focus-visible:outline-none focus-visible:ring-0">
+                  {selectedRequest.beneficiary ? (
+                    <Card className="border-purple-200 shadow-sm hover:shadow-md transition-shadow">
+                      <CardHeader className="bg-gradient-to-r from-purple-50 to-white pb-4">
+                        <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <FileUser className="h-5 w-5 text-purple-600" />
+                          Datos del Beneficiario
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="space-y-2">
+                            <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Nombre Completo</p>
+                            <p className="text-base text-dr-dark-gray font-semibold">
+                              {selectedRequest.beneficiary.firstName} {selectedRequest.beneficiary.lastName}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-bold uppercase text-gray-600">Cédula</p>
+                            <p className="text-sm text-dr-dark-gray font-mono bg-gray-50 px-2 py-1 rounded">
+                              {selectedRequest.beneficiary.nationalId || '—'}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              Email
+                            </p>
+                            <p className="text-sm text-dr-dark-gray">
+                              {selectedRequest.beneficiary.email || '—'}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              Teléfono
+                            </p>
+                            <p className="text-sm text-dr-dark-gray font-mono">
+                              {selectedRequest.beneficiary.phoneNumber || '—'}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              Fecha de Nacimiento
+                            </p>
+                            <p className="text-sm text-dr-dark-gray">
+                              {selectedRequest.beneficiary.dateOfBirth ? new Date(selectedRequest.beneficiary.dateOfBirth).toLocaleDateString('es-DO') : '—'}
+                            </p>
+                          </div>
+                        </div>
+                        {selectedRequest.beneficiary.notes && (
+                          <div className="mt-4 space-y-1">
+                            <p className="text-xs font-bold uppercase text-gray-600">Notas</p>
+                            <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                              {selectedRequest.beneficiary.notes}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="border-gray-200 shadow-sm">
+                      <CardContent className="pt-12 pb-12 text-center">
+                        <User className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                        <p className="text-lg text-gray-500 font-medium">No hay información del beneficiario disponible</p>
+                        <p className="text-sm text-gray-400 mt-2">Esta solicitud no tiene un beneficiario asociado</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+
+              {/* Tab: Jefe de Hogar */}
+              <TabsContent value="hogar" className="flex-1 overflow-y-auto px-6 py-6 m-0 focus-visible:outline-none focus-visible:ring-0">
+                  {selectedRequest.beneficiary?.padronData?.headOfHousehold ? (
+                    <Card className="border-green-200 bg-green-50/30 shadow-sm hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-4">
+                        <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <Home className="h-5 w-5 text-green-600" />
+                          Jefe de Hogar
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-2">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          <div>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nombre Completo</p>
+                            <p className="text-sm text-dr-dark-gray font-medium">
+                              {selectedRequest.beneficiary.padronData.headOfHousehold.firstName} {selectedRequest.beneficiary.padronData.headOfHousehold.lastName}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Cédula</p>
+                            <p className="text-sm text-dr-dark-gray font-mono">
+                              {selectedRequest.beneficiary.padronData.headOfHousehold.nationalId || '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Sexo</p>
+                            <p className="text-sm text-dr-dark-gray">
+                              {selectedRequest.beneficiary.padronData.headOfHousehold.sex || '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nivel de Pobreza</p>
+                            <Badge variant={selectedRequest.beneficiary.padronData.headOfHousehold.povertyLevel === '1' ? 'destructive' : 'secondary'}>
+                              Nivel {selectedRequest.beneficiary.padronData.headOfHousehold.povertyLevel || '—'}
+                            </Badge>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Provincia</p>
+                            <p className="text-sm text-dr-dark-gray">
+                              {selectedRequest.beneficiary.padronData.headOfHousehold.province || '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Municipio</p>
+                            <p className="text-sm text-dr-dark-gray">
+                              {selectedRequest.beneficiary.padronData.headOfHousehold.municipality || '—'}
+                            </p>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Dirección</p>
+                            <p className="text-sm text-dr-dark-gray">
+                              {selectedRequest.beneficiary.padronData.headOfHousehold.address || '—'}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="border-gray-200 shadow-sm">
+                      <CardContent className="pt-12 pb-12 text-center">
+                        <Home className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                        <p className="text-lg text-gray-500 font-medium">No hay información del jefe de hogar disponible</p>
+                        <p className="text-sm text-gray-400 mt-2">No se encontraron datos del padrón para este beneficiario</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+
+              {/* Tab: Miembros */}
+              <TabsContent value="miembros" className="flex-1 overflow-y-auto px-6 py-6 m-0 focus-visible:outline-none focus-visible:ring-0">
+                  {selectedRequest.beneficiary?.padronData?.records && selectedRequest.beneficiary.padronData.records.length > 0 ? (
+                    <div className="space-y-4">
+                      {selectedRequest.beneficiary.padronData.records.map((record: any, index: number) => (
+                        <Card key={index} className="border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                          <CardHeader className="pb-4 bg-gradient-to-r from-blue-50 to-white">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-base font-bold shadow-md">
+                                {index + 1}
+                              </div>
+                              <div className="flex-1">
+                                <CardTitle className="text-lg font-semibold text-dr-dark-gray mb-1">
+                                  {record.firstName} {record.lastName}
+                                </CardTitle>
+                                <p className="text-sm text-gray-600 font-medium">{record.relationship || 'Sin relación especificada'}</p>
+                              </div>
+                              {record.isHeadOfHousehold && (
+                                <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white px-3 py-1">
+                                  Jefe de Hogar
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-6">
+                            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Cédula</p>
+                                <p className="text-base text-dr-dark-gray font-mono bg-gray-50 px-3 py-2 rounded-md border border-gray-200">{record.nationalId || '—'}</p>
+                              </div>
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Sexo</p>
+                                <p className="text-base text-dr-dark-gray font-medium">{record.sex || '—'}</p>
+                              </div>
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Nivel Educativo</p>
+                                <p className="text-base text-dr-dark-gray font-medium">{record.educationLevel || '—'}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <Card className="border-gray-200 shadow-sm">
+                      <CardContent className="pt-12 pb-12 text-center">
+                        <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                        <p className="text-lg text-gray-500 font-medium">No hay miembros del hogar disponibles</p>
+                        <p className="text-sm text-gray-400 mt-2">No se encontraron registros de miembros del hogar</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              </Tabs>
+          )}
+
+          {/* Action Buttons for Analysts - Fixed Footer */}
+          {selectedRequest && isAnalystRole && selectedRequest.assignedTo === currentUser.name && 
+           selectedRequest.status === 'assigned' && (
+            <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 py-4 shadow-lg">
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleUpdateRequestStatus(selectedRequest.id, 'review');
+                    setShowViewModal(false);
+                  }}
+                  className="bg-white hover:bg-dr-blue hover:text-white hover:border-dr-blue transition-all"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Iniciar Revisión
+                </Button>
+                
+                <Button
+                  onClick={() => {
+                    handleUpdateRequestStatus(selectedRequest.id, 'approved');
+                    setShowViewModal(false);
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white shadow-md"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Aprobar
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleUpdateRequestStatus(selectedRequest.id, 'rejected');
+                    setShowViewModal(false);
+                  }}
+                  className="text-red-600 border-red-600 hover:bg-red-600 hover:text-white transition-all"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Rechazar
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

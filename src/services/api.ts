@@ -808,9 +808,32 @@ export async function markNotificationRead(token: string, notificationId: string
 
 export interface RequestDto extends Record<string, unknown> {
   id?: string;
+  beneficiaryId?: string | null;
+  requestTypeId?: string | null;
+  requestTypeCode?: string | null;
+  requestTypeName?: string | null;
+  status?: string;
+  statusName?: string | null;
+  submittedAt?: string | null;
+  completedAt?: string | null;
+  notes?: string | null;
+  externalReference?: string | null;
+  assignedAnalystId?: string | null;
+  assignedAnalystName?: string | null;
+  assignedByUserId?: string | null;
+  assignedByName?: string | null;
+  assignedAt?: string | null;
+  assignmentNotes?: string | null;
+  beneficiary?: BeneficiaryDto | null;
+  documents?: Array<{
+    fileName?: string;
+    contentType?: string;
+    storageUri?: string;
+    fileSizeBytes?: number;
+  }> | string[] | null;
+  // Campos legacy para compatibilidad
   applicant?: string;
   cedula?: string;
-  status?: string;
   date?: string;
   province?: string;
   type?: string;
@@ -821,13 +844,11 @@ export interface RequestDto extends Record<string, unknown> {
   monthlyIncome?: string;
   reason?: string;
   description?: string;
-  documents?: string[];
   assignedTo?: string | null;
   reviewedBy?: string | null;
   reviewDate?: string | null;
   priority?: string;
   assignmentDate?: string | null;
-  assignmentNotes?: string | null;
   auditLogs?: RequestAuditLogDto[] | null;
   auditTrail?: RequestAuditLogDto[] | null;
   actionHistory?: RequestAuditLogDto[] | null;
