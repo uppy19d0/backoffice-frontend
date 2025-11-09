@@ -2447,31 +2447,31 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     <CardContent className="pt-6">
                       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-2">
-                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Tipo de Solicitud</p>
-                          <p className="text-base text-dr-dark-gray font-semibold">
+                          <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Tipo de Solicitud</p>
+                          <p className="text-base text-dr-dark-gray font-bold">
                             {selectedRequest.requestTypeName || selectedRequest.requestTypeCode || getRequestTypeName(selectedRequest.type) || '—'}
                           </p>
                         </div>
                         <div className="space-y-2">
-                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Estado</p>
+                          <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Estado</p>
                           {getStatusBadge(selectedRequest.status)}
                         </div>
                         {selectedRequest.priority && (
                           <div className="space-y-2">
-                            <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Prioridad</p>
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Prioridad</p>
                             {getPriorityBadge(selectedRequest.priority)}
                           </div>
                         )}
                         <div className="space-y-2">
-                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Fecha de Recepción</p>
-                          <p className="text-base text-dr-dark-gray font-medium">
+                          <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Fecha de Recepción</p>
+                          <p className="text-base text-dr-dark-gray font-bold">
                             {selectedRequest.submittedAt ? new Date(selectedRequest.submittedAt).toLocaleString('es-DO') : (selectedRequest.date || '—')}
                           </p>
                         </div>
                         {selectedRequest.externalReference && (
                           <div className="space-y-2">
-                            <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Referencia Externa</p>
-                            <p className="text-base text-dr-dark-gray font-mono bg-gray-50 px-3 py-2 rounded-md border border-gray-200">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Referencia Externa</p>
+                            <p className="text-base text-dr-dark-gray font-bold font-mono bg-blue-50 px-3 py-2 rounded-md border border-blue-200">
                               {selectedRequest.externalReference}
                             </p>
                           </div>
@@ -2509,9 +2509,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       <CardContent className="pt-4">
                         <div className="space-y-4">
                           {selectedRequest.description && (
-                            <div className="space-y-1">
-                              <p className="text-xs font-bold uppercase text-gray-600">Descripción</p>
-                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                            <div className="space-y-2">
+                              <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Descripción</p>
+                              <div className="text-base text-gray-800 bg-gray-50 p-4 rounded-lg font-medium leading-relaxed">
                                 {selectedRequest.description}
                               </div>
                             </div>
@@ -2519,18 +2519,18 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                           
                           <div className="grid gap-4 sm:grid-cols-2">
                             {selectedRequest.householdSize && (
-                              <div className="space-y-1">
-                                <p className="text-xs font-bold uppercase text-gray-600">Miembros del Hogar</p>
-                                <p className="text-sm text-dr-dark-gray font-medium">
+                              <div className="space-y-2">
+                                <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Miembros del Hogar</p>
+                                <p className="text-base text-dr-dark-gray font-bold">
                                   {selectedRequest.householdSize} personas
                                 </p>
                               </div>
                             )}
                             
                             {selectedRequest.monthlyIncome && (
-                              <div className="space-y-1">
-                                <p className="text-xs font-bold uppercase text-gray-600">Ingresos Mensuales</p>
-                                <p className="text-sm text-dr-dark-gray font-medium">
+                              <div className="space-y-2">
+                                <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Ingresos Mensuales</p>
+                                <p className="text-base text-dr-dark-gray font-bold">
                                   {selectedRequest.monthlyIncome}
                                 </p>
                               </div>
@@ -2584,33 +2584,33 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       <CardContent className="pt-6">
                         <div className="grid gap-4 sm:grid-cols-2">
                           {(selectedRequest.assignedAnalystName || selectedRequest.assignedTo) && (
-                            <div className="space-y-1">
-                              <p className="text-xs font-bold uppercase text-gray-600">Asignado a</p>
-                              <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                                <p className="text-dr-blue font-medium">{selectedRequest.assignedAnalystName || selectedRequest.assignedTo}</p>
+                            <div className="space-y-2">
+                              <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Asignado a</p>
+                              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <p className="text-dr-blue font-bold text-base">{selectedRequest.assignedAnalystName || selectedRequest.assignedTo}</p>
                               </div>
                             </div>
                           )}
                           {(selectedRequest.assignedByName || selectedRequest.reviewedBy) && (
-                            <div className="space-y-1">
-                              <p className="text-xs font-bold uppercase text-gray-600">{selectedRequest.assignedByName ? 'Asignado por' : 'Revisado por'}</p>
-                              <div className="p-3 bg-green-50 rounded-md border border-green-200">
-                                <p className="text-green-700 font-medium">{selectedRequest.assignedByName || selectedRequest.reviewedBy}</p>
+                            <div className="space-y-2">
+                              <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">{selectedRequest.assignedByName ? 'Asignado por' : 'Revisado por'}</p>
+                              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                                <p className="text-green-700 font-bold text-base">{selectedRequest.assignedByName || selectedRequest.reviewedBy}</p>
                               </div>
                             </div>
                           )}
                           {selectedRequest.assignedAt && (
-                            <div className="space-y-1">
-                              <p className="text-xs font-bold uppercase text-gray-600">Fecha de Asignación</p>
-                              <p className="text-sm text-dr-dark-gray">
+                            <div className="space-y-2">
+                              <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Fecha de Asignación</p>
+                              <p className="text-base text-dr-dark-gray font-bold">
                                 {new Date(selectedRequest.assignedAt).toLocaleString('es-DO')}
                               </p>
                             </div>
                           )}
                           {selectedRequest.assignmentNotes && (
-                            <div className="space-y-1 sm:col-span-2">
-                              <p className="text-xs font-bold uppercase text-gray-600">Notas de Asignación</p>
-                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                            <div className="space-y-2 sm:col-span-2">
+                              <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Notas de Asignación</p>
+                              <div className="text-base text-gray-800 bg-gray-50 p-4 rounded-lg font-medium leading-relaxed">
                                 {selectedRequest.assignmentNotes}
                               </div>
                             </div>
@@ -2634,49 +2634,49 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       <CardContent className="pt-6">
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                           <div className="space-y-2">
-                            <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Nombre Completo</p>
-                            <p className="text-base text-dr-dark-gray font-semibold">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Nombre Completo</p>
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.firstName} {selectedRequest.beneficiary.lastName}
                             </p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-bold uppercase text-gray-600">Cédula</p>
-                            <p className="text-sm text-dr-dark-gray font-mono bg-gray-50 px-2 py-1 rounded">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Cédula</p>
+                            <p className="text-base text-dr-dark-gray font-bold font-mono bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
                               {selectedRequest.beneficiary.nationalId || '—'}
                             </p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide flex items-center gap-1">
                               <Mail className="h-3 w-3" />
                               Email
                             </p>
-                            <p className="text-sm text-dr-dark-gray">
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.email || '—'}
                             </p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide flex items-center gap-1">
                               <Phone className="h-3 w-3" />
                               Teléfono
                             </p>
-                            <p className="text-sm text-dr-dark-gray font-mono">
+                            <p className="text-base text-dr-dark-gray font-bold font-mono">
                               {selectedRequest.beneficiary.phoneNumber || '—'}
                             </p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
                               Fecha de Nacimiento
                             </p>
-                            <p className="text-sm text-dr-dark-gray">
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.dateOfBirth ? new Date(selectedRequest.beneficiary.dateOfBirth).toLocaleDateString('es-DO') : '—'}
                             </p>
                           </div>
                         </div>
                         {selectedRequest.beneficiary.notes && (
-                          <div className="mt-4 space-y-1">
-                            <p className="text-xs font-bold uppercase text-gray-600">Notas</p>
-                            <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
+                          <div className="mt-4 space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Notas</p>
+                            <div className="text-base text-gray-800 bg-gray-50 p-4 rounded-lg font-medium leading-relaxed">
                               {selectedRequest.beneficiary.notes}
                             </div>
                           </div>
@@ -2705,46 +2705,46 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="pt-2">
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                          <div>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nombre Completo</p>
-                            <p className="text-sm text-dr-dark-gray font-medium">
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Nombre Completo</p>
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.padronData.headOfHousehold.firstName} {selectedRequest.beneficiary.padronData.headOfHousehold.lastName}
                             </p>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Cédula</p>
-                            <p className="text-sm text-dr-dark-gray font-mono">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Cédula</p>
+                            <p className="text-base text-dr-dark-gray font-bold font-mono bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
                               {selectedRequest.beneficiary.padronData.headOfHousehold.nationalId || '—'}
                             </p>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Sexo</p>
-                            <p className="text-sm text-dr-dark-gray">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Sexo</p>
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.padronData.headOfHousehold.sex || '—'}
                             </p>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nivel de Pobreza</p>
-                            <Badge variant={selectedRequest.beneficiary.padronData.headOfHousehold.povertyLevel === '1' ? 'destructive' : 'secondary'}>
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Nivel de Pobreza</p>
+                            <Badge variant={selectedRequest.beneficiary.padronData.headOfHousehold.povertyLevel === '1' ? 'destructive' : 'secondary'} className="text-sm font-bold">
                               Nivel {selectedRequest.beneficiary.padronData.headOfHousehold.povertyLevel || '—'}
                             </Badge>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Provincia</p>
-                            <p className="text-sm text-dr-dark-gray">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Provincia</p>
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.padronData.headOfHousehold.province || '—'}
                             </p>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Municipio</p>
-                            <p className="text-sm text-dr-dark-gray">
+                          <div className="space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Municipio</p>
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.padronData.headOfHousehold.municipality || '—'}
                             </p>
                           </div>
-                          <div className="sm:col-span-2">
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Dirección</p>
-                            <p className="text-sm text-dr-dark-gray">
+                          <div className="sm:col-span-2 space-y-2">
+                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Dirección</p>
+                            <p className="text-base text-dr-dark-gray font-bold">
                               {selectedRequest.beneficiary.padronData.headOfHousehold.address || '—'}
                             </p>
                           </div>
@@ -2789,16 +2789,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                           <CardContent className="pt-6">
                             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                               <div className="space-y-2">
-                                <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Cédula</p>
-                                <p className="text-base text-dr-dark-gray font-mono bg-gray-50 px-3 py-2 rounded-md border border-gray-200">{record.nationalId || '—'}</p>
+                                <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Cédula</p>
+                                <p className="text-base text-dr-dark-gray font-bold font-mono">{record.nationalId || '—'}</p>
                               </div>
                               <div className="space-y-2">
-                                <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Sexo</p>
-                                <p className="text-base text-dr-dark-gray font-medium">{record.sex || '—'}</p>
+                                <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Sexo</p>
+                                <p className="text-base text-dr-dark-gray font-bold">{record.sex || '—'}</p>
                               </div>
                               <div className="space-y-2">
-                                <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Nivel Educativo</p>
-                                <p className="text-base text-dr-dark-gray font-medium">{record.educationLevel || '—'}</p>
+                                <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Nivel Educativo</p>
+                                <p className="text-base text-dr-dark-gray font-bold">{record.educationLevel || '—'}</p>
                               </div>
                             </div>
                           </CardContent>
