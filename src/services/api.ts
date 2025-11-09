@@ -507,6 +507,35 @@ export async function getAuditSummary(token: string, hours = 24): Promise<AuditS
   return apiFetch<AuditSummaryDto>(`/audit/summary?${params.toString()}`, { token });
 }
 
+export interface PadronRecordDto {
+  nationalId?: string;
+  householdId?: string;
+  firstName?: string;
+  lastName?: string;
+  sex?: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
+  povertyLevel?: string;
+  municipality?: string;
+  province?: string;
+  section?: string;
+  neighborhood?: string;
+  address?: string;
+  educationLevel?: string;
+  literacyStatus?: string;
+  relationship?: string;
+  isHeadOfHousehold?: boolean;
+  interviewDate?: string;
+  rawRecord?: string;
+}
+
+export interface PadronDataDto {
+  found?: boolean;
+  records?: PadronRecordDto[];
+  headOfHousehold?: PadronRecordDto;
+  rawPayload?: string;
+}
+
 export interface BeneficiaryDto extends Record<string, unknown> {
   id?: string;
   firstName?: string;
@@ -530,6 +559,7 @@ export interface BeneficiaryDto extends Record<string, unknown> {
   assignedSupervisor?: Record<string, unknown> | null;
   assignmentDate?: string | null;
   assignmentNotes?: string | null;
+  padronData?: PadronDataDto | null;
 }
 
 export interface PagedResult<T> {
