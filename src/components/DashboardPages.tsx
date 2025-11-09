@@ -2555,14 +2555,69 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                           {selectedRequest.documents.map((doc: any, index: number) => {
                             const docName = typeof doc === 'string' ? doc : (doc?.fileName || 'Documento sin nombre');
                             const docSize = typeof doc === 'object' && doc?.fileSizeBytes ? `${(doc.fileSizeBytes / 1024).toFixed(1)} KB` : '';
+                            const docUrl = typeof doc === 'object' ? doc?.storageUri : null;
+                            const contentType = typeof doc === 'object' ? doc?.contentType : null;
+                            const isPdf = contentType?.includes('pdf');
+                            const isImage = contentType?.includes('image');
+                            
                             return (
-                              <div key={index} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-orange-300 hover:bg-orange-50/30 transition-all">
-                                <div className="flex items-center gap-3">
-                                  <FileText className="h-5 w-5 text-orange-600" />
-                                  <span className="text-base text-dr-dark-gray font-medium">{docName}</span>
+                              <div key={index} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-orange-300 hover:shadow-sm transition-all group">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className="flex-shrink-0">
+                                    {isPdf ? (
+                                      <FileText className="h-5 w-5 text-red-600" />
+                                    ) : isImage ? (
+                                      <FileText className="h-5 w-5 text-blue-600" />
+                                    ) : (
+                                      <FileText className="h-5 w-5 text-orange-600" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-base text-dr-dark-gray font-bold truncate">{docName}</p>
+                                    {docSize && (
+                                      <p className="text-xs text-gray-500 font-medium mt-0.5">{docSize}</p>
+                                    )}
+                                  </div>
                                 </div>
-                                {docSize && (
-                                  <span className="text-sm text-gray-500 font-medium">{docSize}</span>
+                                
+                                {docUrl && (
+                                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                                    {/* Botón Preview */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => window.open(docUrl, '_blank')}
+                                      className="h-9 px-3 border-dr-blue text-dr-blue hover:bg-dr-blue hover:text-white transition-all"
+                                    >
+                                      <Eye className="h-4 w-4 mr-1.5" />
+                                      <span className="hidden sm:inline">Ver</span>
+                                    </Button>
+                                    
+                                    {/* Botón Descargar */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const link = document.createElement('a');
+                                        link.href = docUrl;
+                                        link.download = docName;
+                                        link.target = '_blank';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                      }}
+                                      className="h-9 px-3 border-green-600 text-green-600 hover:bg-green-600 hover:text-white transition-all"
+                                    >
+                                      <Download className="h-4 w-4 mr-1.5" />
+                                      <span className="hidden sm:inline">Descargar</span>
+                                    </Button>
+                                  </div>
+                                )}
+                                
+                                {!docUrl && (
+                                  <Badge variant="secondary" className="ml-4">
+                                    Sin URL
+                                  </Badge>
                                 )}
                               </div>
                             );
@@ -2618,6 +2673,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         </div>
                       </CardContent>
                     </Card>
+                  )}
+
+                  {/* Alerta cuando no hay información del padrón */}
+                  {selectedRequest.beneficiary && (!selectedRequest.beneficiary.padronData || !selectedRequest.beneficiary.padronData.found) && (
+                    <Alert className="border-amber-200 bg-amber-50/80">
+                      <AlertCircle className="h-5 w-5 text-amber-600" />
+                      <AlertDescription className="text-amber-800 font-medium ml-2">
+                        <span className="font-bold">Información del Padrón no disponible.</span> Este beneficiario no tiene datos asociados en el padrón nacional.
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </TabsContent>
 
