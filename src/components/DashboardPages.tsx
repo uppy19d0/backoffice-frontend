@@ -52,6 +52,7 @@ import {
 } from '../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -106,7 +107,11 @@ import {
   Bell,
   BellRing,
   Check,
-  CheckCheck
+  CheckCheck,
+  FileUser,
+  Building2,
+  GraduationCap,
+  IdCard
 } from 'lucide-react';
 import { 
   ApiError,
@@ -4350,118 +4355,191 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
 
 
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
-              <User className="h-5 w-5 text-dr-blue" />
-              Detalle del Beneficiario
-            </DialogTitle>
-            <DialogDescription>
-              Información completa del beneficiario {buildBeneficiaryName(selectedBeneficiary ?? {})}
-            </DialogDescription>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="border-b pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-dr-blue to-dr-blue-light flex items-center justify-center">
+                <User className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-dr-dark-gray">
+                  {buildBeneficiaryName(selectedBeneficiary ?? {})}
+                </DialogTitle>
+                <DialogDescription className="text-sm">
+                  Cédula: {selectedBeneficiary?.nationalId || 'No disponible'}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
           {selectedBeneficiary ? (
-            <div className="space-y-6">
-              {/* Información Básica */}
-              <Card className="border-gray-200">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
-                    <User className="h-4 w-4 text-dr-blue" />
-                    Información Básica
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Identificador</p>
-                      <p className="text-sm text-dr-dark-gray break-all">
-                        {typeof selectedBeneficiary.id === 'string'
-                          ? selectedBeneficiary.id
-                          : typeof selectedBeneficiary.id === 'number'
-                            ? String(selectedBeneficiary.id)
-                            : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Nombre Completo</p>
-                      <p className="text-sm text-dr-dark-gray font-medium">
-                        {buildBeneficiaryName(selectedBeneficiary)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Cédula</p>
-                      <p className="text-sm text-dr-dark-gray font-mono">
-                        {typeof selectedBeneficiary.nationalId === 'string' && selectedBeneficiary.nationalId.trim()
-                          ? selectedBeneficiary.nationalId.trim()
-                          : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Correo Electrónico</p>
-                      <p className="text-sm text-dr-dark-gray">
-                        {typeof selectedBeneficiary.email === 'string' && selectedBeneficiary.email.trim()
-                          ? selectedBeneficiary.email.trim()
-                          : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Teléfono</p>
-                      <p className="text-sm text-dr-dark-gray font-mono">
-                        {typeof selectedBeneficiary.phoneNumber === 'string' && selectedBeneficiary.phoneNumber.trim()
-                          ? selectedBeneficiary.phoneNumber.trim()
-                          : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Fecha de Nacimiento</p>
-                      <p className="text-sm text-dr-dark-gray">
-                        {formatBeneficiaryDate(
-                          typeof selectedBeneficiary.dateOfBirth === 'string'
-                            ? selectedBeneficiary.dateOfBirth
-                            : undefined,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Fecha de Registro</p>
-                      <p className="text-sm text-dr-dark-gray">
-                        {formatBeneficiaryDate(
-                          typeof selectedBeneficiary.createdAt === 'string'
-                            ? selectedBeneficiary.createdAt
-                            : undefined,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Última Actualización</p>
-                      <p className="text-sm text-dr-dark-gray">
-                        {formatBeneficiaryDate(
-                          typeof selectedBeneficiary.updatedAt === 'string'
-                            ? selectedBeneficiary.updatedAt
-                            : undefined,
-                        )}
-                      </p>
-                    </div>
-                    {selectedBeneficiary.notes && (
-                      <div className="sm:col-span-2 lg:col-span-3">
-                        <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Notas</p>
-                        <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md">
-                          {typeof selectedBeneficiary.notes === 'string' && selectedBeneficiary.notes.trim()
-                            ? selectedBeneficiary.notes.trim()
-                            : 'Sin notas registradas.'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="flex-1 overflow-y-auto px-1">
+              <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 mb-4">
+                  <TabsTrigger value="general" className="flex items-center gap-2">
+                    <IdCard className="h-4 w-4" />
+                    <span className="hidden sm:inline">Información General</span>
+                    <span className="sm:hidden">General</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="household" className="flex items-center gap-2" disabled={!selectedBeneficiary.padronData?.found}>
+                    <Home className="h-4 w-4" />
+                    <span className="hidden sm:inline">Jefe de Hogar</span>
+                    <span className="sm:hidden">Hogar</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="members" className="flex items-center gap-2" disabled={!selectedBeneficiary.padronData?.records?.length}>
+                    <Users className="h-4 w-4" />
+                    <span className="hidden sm:inline">Miembros ({selectedBeneficiary.padronData?.records?.length || 0})</span>
+                    <span className="sm:hidden">Miembros</span>
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* Información del Padrón */}
-              {selectedBeneficiary.padronData?.found && (
-                <>
-                  {/* Jefe de Hogar */}
-                  {selectedBeneficiary.padronData.headOfHousehold && (
+                {/* Tab: Información General */}
+                <TabsContent value="general" className="space-y-4 mt-0">
+                  <Card className="border-gray-200 shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-white pb-3">
+                      <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                        <FileUser className="h-4 w-4 text-dr-blue" />
+                        Datos Personales
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600">Identificador del Sistema</p>
+                          <p className="text-sm text-dr-dark-gray break-all font-mono bg-gray-50 px-2 py-1 rounded">
+                            {typeof selectedBeneficiary.id === 'string'
+                              ? selectedBeneficiary.id
+                              : typeof selectedBeneficiary.id === 'number'
+                                ? String(selectedBeneficiary.id)
+                                : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600">Nombre Completo</p>
+                          <p className="text-sm text-dr-dark-gray font-medium">
+                            {buildBeneficiaryName(selectedBeneficiary)}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600">Cédula de Identidad</p>
+                          <p className="text-sm text-dr-dark-gray font-mono bg-gray-50 px-2 py-1 rounded">
+                            {typeof selectedBeneficiary.nationalId === 'string' && selectedBeneficiary.nationalId.trim()
+                              ? selectedBeneficiary.nationalId.trim()
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            Correo Electrónico
+                          </p>
+                          <p className="text-sm text-dr-dark-gray">
+                            {typeof selectedBeneficiary.email === 'string' && selectedBeneficiary.email.trim()
+                              ? selectedBeneficiary.email.trim()
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            Teléfono
+                          </p>
+                          <p className="text-sm text-dr-dark-gray font-mono">
+                            {typeof selectedBeneficiary.phoneNumber === 'string' && selectedBeneficiary.phoneNumber.trim()
+                              ? selectedBeneficiary.phoneNumber.trim()
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Fecha de Nacimiento
+                          </p>
+                          <p className="text-sm text-dr-dark-gray">
+                            {formatBeneficiaryDate(
+                              typeof selectedBeneficiary.dateOfBirth === 'string'
+                                ? selectedBeneficiary.dateOfBirth
+                                : undefined,
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-gray-200 shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-purple-50 to-white pb-3">
+                      <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-purple-600" />
+                        Información del Sistema
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600">Fecha de Registro</p>
+                          <p className="text-sm text-dr-dark-gray">
+                            {formatBeneficiaryDate(
+                              typeof selectedBeneficiary.createdAt === 'string'
+                                ? selectedBeneficiary.createdAt
+                                : undefined,
+                            )}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600">Última Actualización</p>
+                          <p className="text-sm text-dr-dark-gray">
+                            {formatBeneficiaryDate(
+                              typeof selectedBeneficiary.updatedAt === 'string'
+                                ? selectedBeneficiary.updatedAt
+                                : undefined,
+                            )}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600">Estado en Padrón</p>
+                          {selectedBeneficiary.padronData?.found ? (
+                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Encontrado
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              No encontrado
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {selectedBeneficiary.notes && (
+                        <div className="mt-4 space-y-1">
+                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3" />
+                            Notas y Observaciones
+                          </p>
+                          <div className="text-sm text-gray-700 bg-amber-50 border border-amber-200 p-3 rounded-md">
+                            {typeof selectedBeneficiary.notes === 'string' && selectedBeneficiary.notes.trim()
+                              ? selectedBeneficiary.notes.trim()
+                              : 'Sin notas registradas.'}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {!selectedBeneficiary.padronData?.found && (
+                    <Alert className="border-amber-200 bg-amber-50">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-amber-800">
+                        <strong>Información del Padrón no disponible.</strong> Este beneficiario no tiene datos asociados en el padrón nacional.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </TabsContent>
+
+                {/* Tab: Jefe de Hogar */}
+                <TabsContent value="household" className="space-y-4 mt-0">
+                  {selectedBeneficiary.padronData?.headOfHousehold && (
                     <Card className="border-green-200 bg-green-50/30">
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
@@ -4472,85 +4550,85 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                       <CardContent>
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Nombre</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nombre</p>
                             <p className="text-sm text-dr-dark-gray font-medium">
                               {selectedBeneficiary.padronData.headOfHousehold.firstName} {selectedBeneficiary.padronData.headOfHousehold.lastName}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Cédula</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Cédula</p>
                             <p className="text-sm text-dr-dark-gray font-mono">
                               {selectedBeneficiary.padronData.headOfHousehold.nationalId || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">ID Hogar</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">ID Hogar</p>
                             <p className="text-sm text-dr-dark-gray font-mono">
                               {selectedBeneficiary.padronData.headOfHousehold.householdId || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Sexo</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Sexo</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.sex || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Teléfono</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Teléfono</p>
                             <p className="text-sm text-dr-dark-gray font-mono">
                               {selectedBeneficiary.padronData.headOfHousehold.phoneNumber || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Nivel de Pobreza</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nivel de Pobreza</p>
                             <Badge className="bg-amber-100 text-amber-800 border-amber-200">
                               Nivel {selectedBeneficiary.padronData.headOfHousehold.povertyLevel || '—'}
                             </Badge>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Provincia</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Provincia</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.province || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Municipio</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Municipio</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.municipality || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Sección</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Sección</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.section || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Barrio/Paraje</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Barrio/Paraje</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.neighborhood || '—'}
                             </p>
                           </div>
                           <div className="sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Dirección</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Dirección</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.address || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Nivel Educativo</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nivel Educativo</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.educationLevel || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Alfabetización</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Alfabetización</p>
                             <p className="text-sm text-dr-dark-gray">
                               {selectedBeneficiary.padronData.headOfHousehold.literacyStatus || '—'}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Fecha de Entrevista</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Fecha de Entrevista</p>
                             <p className="text-sm text-dr-dark-gray">
                               {formatBeneficiaryDate(selectedBeneficiary.padronData.headOfHousehold.interviewDate)}
                             </p>
@@ -4559,133 +4637,133 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                       </CardContent>
                     </Card>
                   )}
+                </TabsContent>
 
-                  {/* Miembros del Hogar */}
-                  {selectedBeneficiary.padronData.records && selectedBeneficiary.padronData.records.length > 0 && (
-                    <Card className="border-blue-200">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
-                          <Users className="h-4 w-4 text-dr-blue" />
-                          Miembros del Hogar ({selectedBeneficiary.padronData.records.length})
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {selectedBeneficiary.padronData.records.map((record, index) => (
-                            <Card key={index} className="border-gray-200 bg-white">
-                              <CardContent className="pt-4">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                                      record.isHeadOfHousehold 
-                                        ? 'bg-green-100 text-green-700' 
-                                        : 'bg-blue-100 text-blue-700'
-                                    }`}>
-                                      {index + 1}
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-semibold text-dr-dark-gray">
-                                        {record.firstName} {record.lastName}
-                                      </p>
-                                      <p className="text-xs text-gray-500">
-                                        {record.relationship || '—'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {record.isHeadOfHousehold && (
-                                    <Badge className="bg-green-100 text-green-800 border-green-200">
-                                      Jefe de Hogar
-                                    </Badge>
-                                  )}
+                {/* Tab: Miembros del Hogar */}
+                <TabsContent value="members" className="space-y-4 mt-0">
+                  {selectedBeneficiary.padronData?.records && selectedBeneficiary.padronData.records.length > 0 && (
+                    <div className="space-y-4">
+                      {selectedBeneficiary.padronData.records.map((record, index) => (
+                        <Card key={index} className={`${record.isHeadOfHousehold ? 'border-green-200 bg-green-50/30' : 'border-blue-200 bg-blue-50/30'}`}>
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                  record.isHeadOfHousehold 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {index + 1}
                                 </div>
-                                <Separator className="my-3" />
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Cédula</p>
-                                    <p className="text-sm text-dr-dark-gray font-mono">
-                                      {record.nationalId || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Sexo</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.sex || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Teléfono</p>
-                                    <p className="text-sm text-dr-dark-gray font-mono">
-                                      {record.phoneNumber || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Nivel de Pobreza</p>
-                                    <Badge className="bg-amber-100 text-amber-800 border-amber-200">
-                                      Nivel {record.povertyLevel || '—'}
-                                    </Badge>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Provincia</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.province || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Municipio</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.municipality || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Sección</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.section || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Barrio/Paraje</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.neighborhood || '—'}
-                                    </p>
-                                  </div>
-                                  <div className="sm:col-span-2">
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Dirección</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.address || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Nivel Educativo</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.educationLevel || '—'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Alfabetización</p>
-                                    <p className="text-sm text-dr-dark-gray">
-                                      {record.literacyStatus || '—'}
-                                    </p>
-                                  </div>
+                                <div>
+                                  <span className="text-base">{record.firstName} {record.lastName}</span>
+                                  <p className="text-xs font-normal text-gray-500 mt-0.5">
+                                    {record.relationship || '—'}
+                                  </p>
                                 </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
+                              </CardTitle>
+                              {record.isHeadOfHousehold && (
+                                <Badge className="bg-green-100 text-green-800 border-green-200">
+                                  <Home className="h-3 w-3 mr-1" />
+                                  Jefe de Hogar
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Cédula</p>
+                                <p className="text-sm text-dr-dark-gray font-mono">
+                                  {record.nationalId || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">ID Hogar</p>
+                                <p className="text-sm text-dr-dark-gray font-mono">
+                                  {record.householdId || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Sexo</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.sex || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Teléfono</p>
+                                <p className="text-sm text-dr-dark-gray font-mono">
+                                  {record.phoneNumber || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Fecha de Nacimiento</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {formatBeneficiaryDate(record.dateOfBirth)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nivel de Pobreza</p>
+                                <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                                  Nivel {record.povertyLevel || '—'}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Provincia</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.province || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Municipio</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.municipality || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Sección</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.section || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Barrio/Paraje</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.neighborhood || '—'}
+                                </p>
+                              </div>
+                              <div className="sm:col-span-2">
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Dirección</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.address || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Nivel Educativo</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.educationLevel || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Alfabetización</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {record.literacyStatus || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold uppercase text-gray-600 mb-1">Fecha de Entrevista</p>
+                                <p className="text-sm text-dr-dark-gray">
+                                  {formatBeneficiaryDate(record.interviewDate)}
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   )}
-                </>
-              )}
-
-              {/* Sin información del padrón */}
-              {!selectedBeneficiary.padronData?.found && (
-                <Alert className="border-amber-200 bg-amber-50">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800">
-                    No se encontró información del padrón para este beneficiario.
-                  </AlertDescription>
-                </Alert>
-              )}
+                </TabsContent>
+              </Tabs>
             </div>
           ) : (
             <p className="text-sm text-gray-500">Seleccione un beneficiario para ver sus datos.</p>
