@@ -693,6 +693,32 @@ export async function searchBeneficiaries(
   return normalizePagedResult<BeneficiaryDto>(response);
 }
 
+export async function getAssignedBeneficiaries(
+  token: string,
+  {
+    search,
+    pageNumber = 1,
+    pageSize = 25,
+    includeAssignments,
+  }: Omit<SearchBeneficiariesOptions, 'assignedTo' | 'onlyAssigned' | 'supervisorId'> = {},
+): Promise<PagedResult<BeneficiaryDto>> {
+  const params = new URLSearchParams();
+  if (search && search.trim().length > 0) {
+    params.set('search', search.trim());
+  }
+  params.set('pageNumber', String(Math.max(1, pageNumber)));
+  params.set('pageSize', String(Math.min(Math.max(1, pageSize), 200)));
+  if (typeof includeAssignments === 'boolean') {
+    params.set('includeAssignments', String(includeAssignments));
+  }
+
+  const response = await apiFetch<unknown>(`/admin/beneficiaries/assigned?${params.toString()}`, {
+    token,
+  });
+
+  return normalizePagedResult<BeneficiaryDto>(response);
+}
+
 export interface AssignBeneficiaryPayload extends Record<string, unknown> {
   analystId: string;
   notes?: string;
@@ -888,6 +914,32 @@ export async function getRequests(
   }
 
   const path = params.toString() ? `/requests?${params.toString()}` : '/requests';
+  const response = await apiFetch<unknown>(path, { token });
+  return normalizeCollection<RequestDto>(response);
+}
+
+export async function getAssignedRequests(
+  token: string,
+  options: ListRequestsOptions = {},
+): Promise<RequestDto[]> {
+  const params = new URLSearchParams();
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.priority) {
+    params.set('priority', options.priority);
+  }
+  if (options.search) {
+    params.set('search', options.search);
+  }
+  if (typeof options.take === 'number') {
+    params.set('take', String(options.take));
+  }
+  if (typeof options.skip === 'number') {
+    params.set('skip', String(options.skip));
+  }
+
+  const path = params.toString() ? `/requests/assigned?${params.toString()}` : '/requests/assigned';
   const response = await apiFetch<unknown>(path, { token });
   return normalizeCollection<RequestDto>(response);
 }

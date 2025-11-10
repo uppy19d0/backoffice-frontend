@@ -152,13 +152,6 @@ const getNavigationItems = (permissions?: {
       return true;
     }
 
-    if (item.id === "beneficiaries") {
-      return (
-        permissions.canManageBeneficiaries ||
-        permissions.canReviewRequests
-      );
-    }
-
     return permissions[item.permission as keyof typeof permissions];
   });
 };

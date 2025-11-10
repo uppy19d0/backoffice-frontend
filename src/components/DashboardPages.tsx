@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { 
+import {
   getRequests,
+  getAssignedRequests,
   getRequestById,
   assignRequest,
   getAssignableUsers,
   unassignRequest,
-  getRequestCountReport, 
+  getRequestCountReport,
   getMonthlyRequestReport,
   getAnnualRequestReport,
   getActiveUsersReport,
@@ -115,7 +116,7 @@ import {
   GraduationCap,
   IdCard
 } from 'lucide-react';
-import { 
+import {
   ApiError,
   AdminUserDto,
   BeneficiaryDto,
@@ -849,7 +850,12 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     try {
       setIsLoading(true);
       setLoadError(null);
-      const data = await getRequests(authToken);
+      // Analysts only see their assigned requests
+      console.log('[RequestsPage] Loading requests, isAnalystRole:', isAnalystRole);
+      const data = isAnalystRole
+        ? await getAssignedRequests(authToken)
+        : await getRequests(authToken);
+      console.log('[RequestsPage] Loaded requests:', data.length, 'items');
       setRequests(data);
       trackRequests(data, true);
     } catch (error) {
@@ -859,7 +865,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [authToken, trackRequests]);
+  }, [authToken, trackRequests, isAnalystRole]);
 
   useEffect(() => {
     void loadRequests();
@@ -1060,45 +1066,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   // Filter requests based on user role
   const getFilteredRequests = () => {
+    // Analysts already get filtered requests from the API (/requests/assigned)
+    // so no need to filter again here
     let filteredRequests = requests;
-
-    // Role-based filtering
-    if (isAnalystRole && currentUser) {
-      const currentUserTokens = new Set<string>();
-      if (currentUser.name?.trim()) {
-        currentUserTokens.add(currentUser.name.trim().toLowerCase());
-      }
-      if (currentUser.username?.trim()) {
-        currentUserTokens.add(currentUser.username.trim().toLowerCase());
-      }
-      if (typeof currentUser.email === 'string' && currentUser.email.trim()) {
-        currentUserTokens.add(currentUser.email.trim().toLowerCase());
-      }
-      if (typeof currentUser.id === 'string' && currentUser.id.trim()) {
-        currentUserTokens.add(currentUser.id.trim().toLowerCase());
-      }
-
-      filteredRequests = requests.filter((req) => {
-        const info = extractRequestAssigneeInfo(req);
-        const candidateTokens: string[] = [];
-        if (info.name) {
-          candidateTokens.push(info.name.toLowerCase());
-        }
-        if (info.email) {
-          candidateTokens.push(info.email.toLowerCase());
-        }
-        if (info.id) {
-          candidateTokens.push(info.id.toLowerCase());
-        }
-        return candidateTokens.some((token) => currentUserTokens.has(token));
-      });
-    } else if (isSupervisorRole || isAdminRole) {
-      // Managers see all requests (can assign to analysts)
-      filteredRequests = requests;
-    } else {
-      // Administrators see all requests
-      filteredRequests = requests;
-    }
 
     // Search filter
     if (searchTerm) {
@@ -4307,11 +4277,8 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           trimOrUndefined(currentUser?.username) ??
           trimOrUndefined(currentUser?.name);
 
-        // Los analistas NO ven beneficiarios directamente asignados
-        // Solo ven beneficiarios a través de solicitudes asignadas
+        // Los analistas no tienen acceso a la página de beneficiarios
         if (isAnalyst) {
-          // Para analistas, no cargar beneficiarios directamente
-          // Los beneficiarios se mostrarán basados en las solicitudes asignadas
           setBeneficiaries([]);
           setPagination({
             totalCount: 0,
@@ -4322,7 +4289,9 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           setCurrentPage(1);
           setLastUpdated(new Date());
           return;
-        } else if ((isSupervisor || isAdmin) && supervisorIdentifier) {
+        }
+
+        if ((isSupervisor || isAdmin) && supervisorIdentifier) {
           addOption({
             ...baseOptions,
             includeAssignments: true,
