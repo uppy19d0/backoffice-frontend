@@ -64,10 +64,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
-import { 
-  Users, 
-  TrendingUp, 
-  DollarSign, 
+import {
+  Users,
+  TrendingUp,
+  DollarSign,
   FileText,
   MoreHorizontal,
   Search,
@@ -92,6 +92,8 @@ import {
   CreditCard,
   User,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   CheckCircle2,
   XCircle,
   RotateCcw,
@@ -257,13 +259,9 @@ const getPriorityBadge = (priority: string) => {
 
 // Dashboard Overview Page
 export function DashboardOverview({ currentUser, authToken, onNavigate }: PageProps) {
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<RequestDto | null>(null);
   const [requestCountReport, setRequestCountReport] = useState<any>(null);
   const [activeUsersReport, setActiveUsersReport] = useState<any>(null);
-  const [recentRequests, setRecentRequests] = useState<any[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [isLoadingRequests, setIsLoadingRequests] = useState(true);
   const roleLabel = currentUser?.role ?? '';
   const normalizedRoleLabel = roleLabel.trim().toLowerCase();
   const normalizedRoleLevel =
@@ -305,25 +303,6 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
     };
 
     loadStats();
-  }, [authToken]);
-
-  // Load recent requests from backend
-  useEffect(() => {
-    const loadRequests = async () => {
-      if (!authToken) return;
-
-      try {
-        setIsLoadingRequests(true);
-        const data = await getRequests(authToken, { take: 5 });
-        setRecentRequests(data);
-      } catch (error) {
-        console.error('Error cargando solicitudes:', error);
-      } finally {
-        setIsLoadingRequests(false);
-      }
-    };
-
-    loadRequests();
   }, [authToken]);
 
   const formatNumber = (num: number | undefined) => {
@@ -443,40 +422,6 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
 
   const stats = getStatsForRole();
   const pendingAssignments = requestCountReport?.pendingRequests ?? 0;
-
-  // Filtrar solicitudes según el rol del usuario
-  const getFilteredRequests = () => {
-    if (!recentRequests || recentRequests.length === 0) return [];
-    
-    if (currentUser?.roleLevel === 'Analyst') {
-      // Para analistas: mostrar principalmente sus solicitudes asignadas
-      return recentRequests.filter(req => req.assignedTo === currentUser.name).slice(0, 5);
-    } else if (currentUser?.roleLevel === 'Supervisor') {
-      // Para managers: mostrar solicitudes que requieren aprobación + en revisión
-      return recentRequests.filter(req => 
-        normalizeStatus(req.status) === 'review' || 
-        normalizeStatus(req.status) === 'pending'
-      ).slice(0, 5);
-    } else {
-      // Para administradores: mostrar todas las solicitudes recientes
-      return recentRequests.slice(0, 5);
-    }
-  };
-
-  const filteredRecentRequests = getFilteredRequests();
-
-  // Helper function to normalize status (same as in RequestsPage)
-  function normalizeStatus(status: string | number): string {
-    const statusMap: Record<string, string> = {
-      '0': 'pending',
-      '1': 'assigned',
-      '2': 'review',
-      '3': 'approved',
-      '4': 'rejected',
-    };
-    const statusStr = typeof status === 'number' ? String(status) : status;
-    return statusMap[statusStr] || statusStr;
-  }
 
   // Solicitudes hardcodeadas (DEPRECATED - se eliminará)
   const getAllRequests_OLD = () => [
@@ -631,11 +576,6 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
       }
     ] : [])
   ];
-
-  const handleViewRequest = (request: any) => {
-    setSelectedRequest(request);
-    setShowViewModal(true);
-  };
 
   return (
     <div className="space-y-6">
@@ -795,257 +735,6 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
           </CardContent>
         </Card>
       )}
-
-      {/* Recent Requests */}
-      <Card className="border border-gray-200">
-        <CardHeader>
-          <CardTitle className="text-dr-dark-gray">
-            {isAdmin 
-              ? 'Solicitudes Recientes del Sistema'
-              : isSupervisor
-              ? 'Solicitudes Pendientes de Asignación'
-              : 'Mis Solicitudes Asignadas'
-            }
-          </CardTitle>
-          <CardDescription className="text-gray-600">
-            {isAdmin 
-              ? 'Últimas solicitudes de beneficiarios recibidas en el sistema'
-              : isSupervisor
-              ? 'Solicitudes que requieren asignación a analistas'
-              : 'Solicitudes asignadas para su revisión y análisis'
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-dr-dark-gray whitespace-nowrap">ID Solicitud</TableHead>
-                  <TableHead className="text-dr-dark-gray min-w-[180px]">Solicitante</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden sm:table-cell">Cédula</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden md:table-cell">Provincia</TableHead>
-                  <TableHead className="text-dr-dark-gray">Estado</TableHead>
-                  <TableHead className="text-dr-dark-gray hidden lg:table-cell">Fecha</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoadingRequests ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-dr-blue"></div>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : filteredRecentRequests.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                      No hay solicitudes recientes
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRecentRequests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell className="font-medium text-dr-blue whitespace-nowrap">#{request.id}</TableCell>
-                    <TableCell className="text-dr-dark-gray">
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">{request.applicant}</p>
-                        <p className="text-sm text-gray-500 sm:hidden">{request.cedula}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-dr-dark-gray hidden sm:table-cell">{request.cedula}</TableCell>
-                    <TableCell className="text-dr-dark-gray hidden md:table-cell">{request.province}</TableCell>
-                    <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell className="text-dr-dark-gray hidden lg:table-cell">{request.date}</TableCell>
-                    <TableCell>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleViewRequest(request)}
-                        className="text-dr-blue hover:bg-blue-50"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* View Request Modal */}
-      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-dr-dark-gray flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-dr-blue" />
-              Detalles de la Solicitud #{selectedRequest?.id}
-            </DialogTitle>
-            <DialogDescription>
-              Información completa de la solicitud de {selectedRequest?.applicant}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedRequest && (
-            <div className="space-y-6">
-              {/* Request Status and Info */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  {getStatusBadge(selectedRequest.status)}
-                  <span className="text-sm text-gray-600">
-                    Solicitud recibida el {selectedRequest.date}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getRequestTypeIcon(selectedRequest.type)}
-                  <span className="text-sm font-medium">{getRequestTypeName(selectedRequest.type)}</span>
-                </div>
-              </div>
-
-              {/* Applicant Information */}
-              <div>
-                <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Información del Solicitante
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Nombre Completo</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray font-medium">{selectedRequest.applicant}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Cédula</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray font-medium">{selectedRequest.cedula}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Teléfono</Label>
-                    <div className="p-3 bg-gray-50 rounded-md flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-gray-500" />
-                      <p className="text-dr-dark-gray">{selectedRequest.phone}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Email</Label>
-                    <div className="p-3 bg-gray-50 rounded-md flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-500" />
-                      <p className="text-dr-dark-gray">{selectedRequest.email}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 col-span-2">
-                    <Label className="text-sm font-medium text-gray-600">Dirección</Label>
-                    <div className="p-3 bg-gray-50 rounded-md flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-gray-500" />
-                      <p className="text-dr-dark-gray">{selectedRequest.address}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Request Details */}
-              <div>
-                <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Detalles de la Solicitud
-                </h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Razón de la Solicitud</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray font-medium">{selectedRequest.reason}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-600">Descripción Detallada</Label>
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-dr-dark-gray">{selectedRequest.description}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-600">Miembros del Hogar</Label>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-dr-dark-gray font-medium">{selectedRequest.householdSize} personas</p>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-600">Ingresos Mensuales</Label>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-dr-dark-gray font-medium">{selectedRequest.monthlyIncome}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Documents */}
-              <div>
-                <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Documentos Adjuntos
-                </h3>
-                <div className="grid grid-cols-1 gap-2">
-                  {selectedRequest.documents?.map((doc: any, index: number) => {
-                    const docName = typeof doc === 'string' ? doc : doc?.fileName || 'Documento sin nombre';
-                    return (
-                      <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
-                        <FileText className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-dr-dark-gray">{docName}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Assignment Info */}
-              {selectedRequest.assignedTo && (
-                <div>
-                  <h3 className="text-lg font-semibold text-dr-dark-gray mb-4 flex items-center gap-2">
-                    <UserCheck className="h-5 w-5" />
-                    Información de Asignación
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-600">Asignado a</Label>
-                      <div className="p-3 bg-blue-50 rounded-md">
-                        <p className="text-dr-blue font-medium">{selectedRequest.assignedTo}</p>
-                      </div>
-                    </div>
-                    
-                    {selectedRequest.reviewedBy && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-600">Revisado por</Label>
-                        <div className="p-3 bg-green-50 rounded-md">
-                          <p className="text-green-700 font-medium">{selectedRequest.reviewedBy}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -1058,7 +747,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -1066,6 +755,14 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const [selectedAnalyst, setSelectedAnalyst] = useState('');
   const [assignmentNotes, setAssignmentNotes] = useState('');
   const [unassignNotes, setUnassignNotes] = useState('');
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Sorting states
+  const [sortField, setSortField] = useState<string>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const { pushNotification } = useNotifications();
   const previousRequestIdsRef = useRef<Set<string>>(new Set());
   const requestsInitializedRef = useRef(false);
@@ -1408,10 +1105,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       const normalizedSearch = searchTerm.toLowerCase();
       filteredRequests = filteredRequests.filter((req) => {
         const assigneeName = resolveRequestAssigneeName(req);
+        const fullName = req.beneficiary
+          ? `${req.beneficiary.firstName || ''} ${req.beneficiary.lastName || ''}`.trim()
+          : req.applicant || '';
+        const nationalId = req.beneficiary?.nationalId || req.cedula || '';
+
         return (
-          req.applicant?.toLowerCase().includes(normalizedSearch) ||
-          req.cedula?.toLowerCase().includes(normalizedSearch) ||
+          fullName.toLowerCase().includes(normalizedSearch) ||
+          nationalId.toLowerCase().includes(normalizedSearch) ||
           req.id?.toLowerCase().includes(normalizedSearch) ||
+          req.externalReference?.toLowerCase().includes(normalizedSearch) ||
           (assigneeName ? assigneeName.toLowerCase().includes(normalizedSearch) : false)
         );
       });
@@ -1422,15 +1125,82 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       filteredRequests = filteredRequests.filter(req => normalizeStatus(req.status) === statusFilter);
     }
 
-    // Priority filter
-    if (priorityFilter !== 'all') {
-      filteredRequests = filteredRequests.filter(req => req.priority === priorityFilter);
+    // Type filter
+    if (typeFilter !== 'all') {
+      filteredRequests = filteredRequests.filter(req => {
+        const typeCode = req.requestTypeCode || req.type;
+        return typeCode === typeFilter;
+      });
     }
+
+    // Sorting
+    filteredRequests = [...filteredRequests].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case 'id':
+          aValue = a.id || '';
+          bValue = b.id || '';
+          break;
+        case 'applicant':
+          const aFullName = a.beneficiary
+            ? `${a.beneficiary.firstName || ''} ${a.beneficiary.lastName || ''}`.trim().toLowerCase()
+            : (a.applicant?.toLowerCase() || '');
+          const bFullName = b.beneficiary
+            ? `${b.beneficiary.firstName || ''} ${b.beneficiary.lastName || ''}`.trim().toLowerCase()
+            : (b.applicant?.toLowerCase() || '');
+          aValue = aFullName;
+          bValue = bFullName;
+          break;
+        case 'status':
+          aValue = normalizeStatus(a.status);
+          bValue = normalizeStatus(b.status);
+          break;
+        case 'assignedTo':
+          aValue = resolveRequestAssigneeName(a)?.toLowerCase() || '';
+          bValue = resolveRequestAssigneeName(b)?.toLowerCase() || '';
+          break;
+        case 'date':
+        default:
+          // Parse dates for sorting
+          aValue = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+          bValue = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+          break;
+      }
+
+      if (sortDirection === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
 
     return filteredRequests;
   };
 
   const filteredRequests = getFilteredRequests();
+
+  // Pagination
+  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedRequests = filteredRequests.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, typeFilter]);
+
+  // Handle sort
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const { outOfTeamAnalystsCount, teamAnalystsCount } = useMemo(() => {
     if (isAdminRole) {
@@ -1676,16 +1446,12 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       review: 0,
       approved: 0,
       rejected: 0,
-      highPriority: 0,
     };
 
     for (const request of requests) {
       const statusKey = normalizeStatus(request.status);
       if (statusKey in summary && statusKey !== 'total') {
         summary[statusKey as keyof typeof summary] += 1;
-      }
-      if (request.priority === 'high') {
-        summary.highPriority += 1;
       }
     }
 
@@ -1707,13 +1473,6 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         value: statusSummary.pending + statusSummary.review,
         helper: 'Pendientes y en revisión',
         accent: 'from-amber-400 via-orange-500 to-pink-500',
-      },
-      {
-        key: 'high',
-        label: 'Prioridad alta',
-        value: statusSummary.highPriority,
-        helper: 'Requieren seguimiento',
-        accent: 'from-red-500 via-rose-500 to-fuchsia-500',
       },
     ],
     [statusSummary],
@@ -1866,7 +1625,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   </button>
                 );
               })}
-              {(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all') && (
+              {(searchTerm || statusFilter !== 'all' || typeFilter !== 'all') && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1874,7 +1633,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   onClick={() => {
                     setSearchTerm('');
                     setStatusFilter('all');
-                    setPriorityFilter('all');
+                    setTypeFilter('all');
                   }}
                 >
                   <RotateCcw className="h-4 w-4" />
@@ -1884,7 +1643,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-sm">
               <Label htmlFor="search" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Buscar
@@ -1922,17 +1681,21 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
             <div className="space-y-3 rounded-2xl border border-white/60 bg-white/90 p-4 shadow-sm">
               <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Prioridad
+                Tipo de Solicitud
               </Label>
-              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="border-none bg-transparent text-sm text-dr-dark-gray focus:ring-2 focus:ring-dr-blue">
-                  <SelectValue placeholder="Todas las prioridades" />
+                  <SelectValue placeholder="Todos los tipos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="medium">Media</SelectItem>
-                  <SelectItem value="low">Baja</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="ACTUALIZACION_DATOS">Actualización de Datos</SelectItem>
+                  <SelectItem value="address-change">Cambio de Dirección</SelectItem>
+                  <SelectItem value="death-notice">Notificación de Fallecimiento</SelectItem>
+                  <SelectItem value="MEMBER-INFO-UPDATE">Actualización Info de Miembro</SelectItem>
+                  <SelectItem value="name-change">Cambio de Nombre</SelectItem>
+                  <SelectItem value="id-change">Actualización de Cédula</SelectItem>
+                  <SelectItem value="SOCIAL-AID">Ayuda Social</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1977,51 +1740,123 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Solicitante</TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('id')}
+                    >
+                      <div className="flex items-center gap-1">
+                        ID
+                        {sortField === 'id' && (
+                          sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('applicant')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Solicitante
+                        {sortField === 'applicant' && (
+                          sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead className="hidden sm:table-cell">Tipo</TableHead>
-                    <TableHead className="hidden md:table-cell">Provincia</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="hidden lg:table-cell">Prioridad</TableHead>
-                    <TableHead className="min-w-[200px]">Asignado a</TableHead>
-                    <TableHead className="hidden lg:table-cell">Fecha</TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('status')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Estado
+                        {sortField === 'status' && (
+                          sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Cédula
+                    </TableHead>
+                    <TableHead
+                      className="min-w-[200px] cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('assignedTo')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Asignado a
+                        {sortField === 'assignedTo' && (
+                          sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="hidden lg:table-cell cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Fecha
+                        {sortField === 'date' && (
+                          sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRequests.map((request) => (
+                  {paginatedRequests.map((request) => (
                   <TableRow key={request.id}>
-                    <TableCell className="font-medium text-dr-blue">#{request.id}</TableCell>
+                    <TableCell className="font-medium text-dr-blue">
+                      <div className="space-y-0.5">
+                        <div>#{request.id?.substring(0, 8)}</div>
+                        {request.externalReference && (
+                          <div className="text-xs text-gray-500">{request.externalReference}</div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{request.applicant}</p>
-                        <p className="text-sm text-gray-500 sm:hidden">{request.cedula}</p>
+                        <p className="font-medium">
+                          {request.beneficiary
+                            ? `${request.beneficiary.firstName || ''} ${request.beneficiary.lastName || ''}`.trim()
+                            : request.applicant || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500 sm:hidden">
+                          {request.beneficiary?.nationalId || request.cedula || 'N/A'}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <div className="flex items-center gap-2">
-                        {getRequestTypeIcon(request.type)}
-                        <span className="text-sm">{getRequestTypeName(request.type)}</span>
+                        {getRequestTypeIcon(request.requestTypeCode || request.type)}
+                        <span className="text-sm">{request.requestTypeNameSpanish || request.nameSpanish || getRequestTypeName(request.requestTypeCode || request.type)}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">{request.province}</TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{getPriorityBadge(request.priority)}</TableCell>
-                    <TableCell className="text-sm text-gray-700">
-                      {(() => {
-                        const assigneeName = resolveRequestAssigneeName(request);
-                        return assigneeName ? (
-                          <span className="text-dr-blue font-medium">{assigneeName}</span>
-                        ) : (
-                          <span className="text-gray-500">Sin asignar</span>
-                        );
-                      })()}
+                    <TableCell className="hidden sm:table-cell text-sm text-gray-600">
+                      {request.beneficiary?.nationalId || request.cedula || 'N/A'}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">{request.date}</TableCell>
+                    <TableCell className="text-sm text-gray-700">
+                      {request.assignedAnalystName ? (
+                        <span className="text-dr-blue font-medium">{request.assignedAnalystName}</span>
+                      ) : (
+                        <span className="text-gray-500">Sin asignar</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {request.submittedAt
+                        ? new Date(request.submittedAt).toLocaleDateString('es-DO', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })
+                        : request.date || 'N/A'}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button
@@ -2120,6 +1955,210 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4 p-4">
+              {paginatedRequests.map((request) => (
+                <Card key={request.id} className="border border-gray-200 shadow-sm">
+                  <CardContent className="p-4 space-y-3">
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-dr-blue text-sm">#{request.id?.substring(0, 8)}</span>
+                          {getStatusBadge(request.status)}
+                        </div>
+                        <p className="font-medium text-base text-dr-dark-gray">
+                          {request.beneficiary
+                            ? `${request.beneficiary.firstName || ''} ${request.beneficiary.lastName || ''}`.trim()
+                            : request.applicant || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {request.beneficiary?.nationalId || request.cedula || 'N/A'}
+                        </p>
+                        {request.externalReference && (
+                          <p className="text-xs text-gray-400 mt-1">{request.externalReference}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Info Grid */}
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2 text-gray-600">
+                        {getRequestTypeIcon(request.requestTypeCode || request.type)}
+                        <span>{request.requestTypeNameSpanish || request.nameSpanish || getRequestTypeName(request.requestTypeCode || request.type)}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Calendar className="h-4 w-4" />
+                        <span>
+                          {request.submittedAt
+                            ? new Date(request.submittedAt).toLocaleDateString('es-DO', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })
+                            : request.date || 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-gray-600" />
+                        {request.assignedAnalystName ? (
+                          <span className="text-dr-blue font-medium text-sm">{request.assignedAnalystName}</span>
+                        ) : (
+                          <span className="text-gray-500 text-sm">Sin asignar</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewRequest(request)}
+                        className="flex-1 text-dr-blue border-dr-blue hover:bg-blue-50"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Ver detalles
+                      </Button>
+
+                      {(() => {
+                        const assigneeName = resolveRequestAssigneeName(request);
+                        const isManager = isSupervisorRole || isAdminRole;
+                        const canAssign = isManager && (
+                          normalizeStatus(request.status) === 'pending' ||
+                          normalizeStatus(request.status) === 'assigned' ||
+                          normalizeStatus(request.status) === 'review'
+                        );
+
+                        return canAssign && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAssignRequest(request)}
+                            className={`${
+                              !assigneeName
+                                ? 'text-green-600 border-green-600 hover:bg-green-50'
+                                : 'text-orange-600 border-orange-600 hover:bg-orange-50'
+                            }`}
+                          >
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            {!assigneeName ? 'Asignar' : 'Reasignar'}
+                          </Button>
+                        );
+                      })()}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            </>
+          )}
+
+          {/* Pagination */}
+          {!isLoading && filteredRequests.length > 0 && (
+            <div className="border-t border-gray-200 bg-gray-50/50 px-6 py-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Mostrar</span>
+                  <Select
+                    value={String(itemsPerPage)}
+                    onValueChange={(value) => {
+                      setItemsPerPage(Number(value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-20 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-gray-600">
+                    de {filteredRequests.length} solicitudes
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="h-9"
+                  >
+                    Primera
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="h-9"
+                  >
+                    Anterior
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((page) => {
+                        // Show first page, last page, current page, and pages around current
+                        if (page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1) {
+                          return true;
+                        }
+                        return false;
+                      })
+                      .map((page, index, array) => {
+                        // Add ellipsis if there's a gap
+                        const prevPage = array[index - 1];
+                        const showEllipsis = prevPage && page - prevPage > 1;
+
+                        return (
+                          <React.Fragment key={page}>
+                            {showEllipsis && (
+                              <span className="px-2 text-gray-400">...</span>
+                            )}
+                            <Button
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(page)}
+                              className={`h-9 w-9 ${currentPage === page ? 'bg-dr-blue text-white' : ''}`}
+                            >
+                              {page}
+                            </Button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="h-9"
+                  >
+                    Siguiente
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="h-9"
+                  >
+                    Última
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -2152,10 +2191,6 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       {getRequestTypeIcon(selectedRequest.type)}
                       <span className="text-sm">{getRequestTypeName(selectedRequest.type)}</span>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Prioridad:</span>
-                    {getPriorityBadge(selectedRequest.priority)}
                   </div>
                 </div>
               </div>
@@ -2368,13 +2403,12 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   Solicitud #{selectedRequest?.id?.substring(0, 8)}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-gray-600 truncate">
-                  {selectedRequest?.requestTypeName || selectedRequest?.type || 'Solicitud'} {selectedRequest?.beneficiary && `• ${selectedRequest.beneficiary.firstName} ${selectedRequest.beneficiary.lastName}`}
+                  {selectedRequest?.requestTypeNameSpanish || selectedRequest?.requestTypeName || selectedRequest?.type || 'Solicitud'} {selectedRequest?.beneficiary && `• ${selectedRequest.beneficiary.firstName} ${selectedRequest.beneficiary.lastName}`}
                 </DialogDescription>
               </div>
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   {selectedRequest && getStatusBadge(selectedRequest.status)}
-                  {selectedRequest?.priority && getPriorityBadge(selectedRequest.priority)}
                 </div>
                 {selectedRequest?.submittedAt && (
                   <span className="text-xs text-gray-500">
@@ -2449,19 +2483,13 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         <div className="space-y-2">
                           <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Tipo de Solicitud</p>
                           <p className="text-base text-dr-dark-gray font-bold">
-                            {selectedRequest.requestTypeName || selectedRequest.requestTypeCode || getRequestTypeName(selectedRequest.type) || '—'}
+                            {selectedRequest.requestTypeNameSpanish || selectedRequest.requestTypeName || getRequestTypeName(selectedRequest.requestTypeCode || selectedRequest.type) || '—'}
                           </p>
                         </div>
                         <div className="space-y-2">
                           <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Estado</p>
                           {getStatusBadge(selectedRequest.status)}
                         </div>
-                        {selectedRequest.priority && (
-                          <div className="space-y-2">
-                            <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Prioridad</p>
-                            {getPriorityBadge(selectedRequest.priority)}
-                          </div>
-                        )}
                         <div className="space-y-2">
                           <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Fecha de Recepción</p>
                           <p className="text-base text-dr-dark-gray font-bold">

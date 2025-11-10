@@ -812,6 +812,8 @@ export interface RequestDto extends Record<string, unknown> {
   requestTypeId?: string | null;
   requestTypeCode?: string | null;
   requestTypeName?: string | null;
+  requestTypeNameSpanish?: string | null;
+  nameSpanish?: string | null;
   status?: string;
   statusName?: string | null;
   submittedAt?: string | null;
