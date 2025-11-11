@@ -6359,6 +6359,20 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [reportActionLoading, setReportActionLoading] = useState<string | null>(null);
 
+  // Check if user is admin
+  const normalizedRoleLabel =
+    typeof currentUser?.role === 'string'
+      ? currentUser.role.trim().toLowerCase()
+      : '';
+  const normalizedRoleLevel =
+    typeof currentUser?.roleLevel === 'string'
+      ? currentUser.roleLevel.trim().toLowerCase()
+      : '';
+  const isAdmin =
+    normalizedRoleLabel.includes('admin') ||
+    normalizedRoleLabel.includes('administrador') ||
+    normalizedRoleLevel === 'admin';
+
   const availableYears = useMemo(() => {
     const years: number[] = [];
     for (let year = currentYear; year >= currentYear - 5; year -= 1) {
@@ -6438,16 +6452,26 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
       try {
         setIsLoadingStats(true);
         
-        // Load multiple reports in parallel
-        const [requestCount, activeUsers, usersByRole] = await Promise.all([
+        // Load reports based on user role
+        // Admin users load all reports, others only load request count report
+        const promises = [
           getRequestCountReport(authToken).catch(() => null),
-          getActiveUsersReport(authToken).catch(() => null),
-          getUsersByRoleReport(authToken).catch(() => null),
-        ]);
+        ];
         
-        setRequestCountReport(requestCount);
-        setActiveUsersReport(activeUsers);
-        setUsersByRoleReport(usersByRole);
+        if (isAdmin) {
+          promises.push(
+            getActiveUsersReport(authToken).catch(() => null),
+            getUsersByRoleReport(authToken).catch(() => null)
+          );
+        }
+        
+        const results = await Promise.all(promises);
+        
+        setRequestCountReport(results[0]);
+        if (isAdmin) {
+          setActiveUsersReport(results[1]);
+          setUsersByRoleReport(results[2]);
+        }
       } catch (error) {
         console.error('Error cargando reportes:', error);
         toast.error('Error al cargar reportes');
@@ -6457,7 +6481,7 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
     };
 
     loadReports();
-  }, [authToken]);
+  }, [authToken, isAdmin]);
 
   const handleViewMonthlyReport = async () => {
     if (!authToken) return;
@@ -6653,7 +6677,7 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-dr-blue"></div>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className={`grid gap-4 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
@@ -6684,20 +6708,23 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-green-50 p-3 rounded-full">
-                  <Users className="h-6 w-6 text-green-600" />
+          {/* Admin-only stat */}
+          {isAdmin && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="bg-green-50 p-3 rounded-full">
+                    <Users className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-dr-dark-gray">Usuarios Activos</h3>
+                    <p className="text-2xl font-bold text-green-600">{formatNumber(activeUsersReport?.totalActiveUsers)}</p>
+                    <p className="text-sm text-gray-600">En el sistema</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-dr-dark-gray">Usuarios Activos</h3>
-                  <p className="text-2xl font-bold text-green-600">{formatNumber(activeUsersReport?.totalActiveUsers)}</p>
-                  <p className="text-sm text-gray-600">En el sistema</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -6905,145 +6932,150 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
               </CardContent>
             </Card>
 
-            <Card className="border-2 border-dashed border-gray-200 hover:border-amber-600 transition-colors">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <Users className="h-8 w-8 text-amber-600 flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios Activos</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Usuarios activos agrupados por departamento y provincia
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <Button
-                        size="sm"
-                        onClick={handleViewActiveUsersReport}
-                        className="bg-amber-600 hover:bg-amber-700"
-                        disabled={reportActionLoading === 'view-active-users'}
-                      >
-                        {reportActionLoading === 'view-active-users' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Generando...
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadPDF('active-users')}
-                        disabled={reportActionLoading === 'pdf-active-users'}
-                      >
-                        {reportActionLoading === 'pdf-active-users' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadExcel('active-users')}
-                        disabled={reportActionLoading === 'excel-active-users'}
-                      >
-                        {reportActionLoading === 'excel-active-users' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <FileSpreadsheet className="h-4 w-4 mr-1" />
-                            Excel
-                          </>
-                        )}
-                      </Button>
+            {/* Admin-only reports */}
+            {isAdmin && (
+              <>
+                <Card className="border-2 border-dashed border-gray-200 hover:border-amber-600 transition-colors">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <Users className="h-8 w-8 text-amber-600 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios Activos</h3>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Usuarios activos agrupados por departamento y provincia
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            onClick={handleViewActiveUsersReport}
+                            className="bg-amber-600 hover:bg-amber-700"
+                            disabled={reportActionLoading === 'view-active-users'}
+                          >
+                            {reportActionLoading === 'view-active-users' ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Generando...
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownloadPDF('active-users')}
+                            disabled={reportActionLoading === 'pdf-active-users'}
+                          >
+                            {reportActionLoading === 'pdf-active-users' ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Descargando...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-4 w-4 mr-1" />
+                                PDF
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownloadExcel('active-users')}
+                            disabled={reportActionLoading === 'excel-active-users'}
+                          >
+                            {reportActionLoading === 'excel-active-users' ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Descargando...
+                              </>
+                            ) : (
+                              <>
+                                <FileSpreadsheet className="h-4 w-4 mr-1" />
+                                Excel
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
 
-            <Card className="border-2 border-dashed border-gray-200 hover:border-purple-600 transition-colors">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <ClipboardList className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios por Roles</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Distribución de usuarios agrupados por roles del sistema
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <Button
-                        size="sm"
-                        onClick={handleViewUsersByRoleReport}
-                        className="bg-purple-600 hover:bg-purple-700"
-                        disabled={reportActionLoading === 'view-users-by-role'}
-                      >
-                        {reportActionLoading === 'view-users-by-role' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Generando...
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadPDF('users-by-role')}
-                        disabled={reportActionLoading === 'pdf-users-by-role'}
-                      >
-                        {reportActionLoading === 'pdf-users-by-role' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadExcel('users-by-role')}
-                        disabled={reportActionLoading === 'excel-users-by-role'}
-                      >
-                        {reportActionLoading === 'excel-users-by-role' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <FileSpreadsheet className="h-4 w-4 mr-1" />
-                            Excel
-                          </>
-                        )}
-                      </Button>
+                <Card className="border-2 border-dashed border-gray-200 hover:border-purple-600 transition-colors">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <ClipboardList className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios por Roles</h3>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Distribución de usuarios agrupados por roles del sistema
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            onClick={handleViewUsersByRoleReport}
+                            className="bg-purple-600 hover:bg-purple-700"
+                            disabled={reportActionLoading === 'view-users-by-role'}
+                          >
+                            {reportActionLoading === 'view-users-by-role' ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Generando...
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownloadPDF('users-by-role')}
+                            disabled={reportActionLoading === 'pdf-users-by-role'}
+                          >
+                            {reportActionLoading === 'pdf-users-by-role' ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Descargando...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-4 w-4 mr-1" />
+                                PDF
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownloadExcel('users-by-role')}
+                            disabled={reportActionLoading === 'excel-users-by-role'}
+                          >
+                            {reportActionLoading === 'excel-users-by-role' ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                Descargando...
+                              </>
+                            ) : (
+                              <>
+                                <FileSpreadsheet className="h-4 w-4 mr-1" />
+                                Excel
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
