@@ -6662,65 +6662,94 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-dr-dark-gray">Reportes y Estadísticas</h1>
-        <p className="text-gray-600 mt-1">
-          Genere reportes detallados y consulte estadísticas del sistema SIUBEN
-        </p>
+    <div className="space-y-8">
+      {/* Header with gradient background */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-dr-blue via-blue-600 to-indigo-700 p-8 shadow-xl">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE2YzAtMS4xLjktMiAyLTJzMiAuOSAyIDItLjkgMi0yIDItMi0uOS0yLTJ6bS0yMCAwYzAtMS4xLjktMiAyLTJzMiAuOSAyIDItLjkgMi0yIDItMi0uOS0yLTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
+        <div className="relative">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+              <FileText className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">Reportes y Estadísticas</h1>
+              <p className="text-blue-100 mt-1">
+                Centro de análisis y generación de reportes del sistema SIUBEN
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Quick Stats */}
+      {/* Quick Stats with enhanced design */}
       {isLoadingStats ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-dr-blue"></div>
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl shadow-sm">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-dr-blue border-t-transparent"></div>
+          <p className="mt-4 text-gray-600 font-medium">Cargando estadísticas...</p>
         </div>
       ) : (
-        <div className={`grid gap-4 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-          <Card>
+        <div className={`grid gap-6 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-gradient-to-br from-blue-50 to-white">
             <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-blue-50 p-3 rounded-full">
-                  <ClipboardList className="h-6 w-6 text-dr-blue" />
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-dr-blue/10 p-4 rounded-2xl ring-4 ring-dr-blue/5">
+                  <ClipboardList className="h-7 w-7 text-dr-blue" />
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-dr-dark-gray">Total Solicitudes</h3>
-                  <p className="text-2xl font-bold text-dr-blue">{formatNumber(requestCountReport?.totalRequests)}</p>
-                  <p className="text-sm text-gray-600">En el sistema</p>
+                <div className="bg-dr-blue/10 px-3 py-1 rounded-full">
+                  <span className="text-xs font-bold text-dr-blue">TOTAL</span>
                 </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-1">Total Solicitudes</h3>
+                <p className="text-4xl font-bold text-dr-blue mb-1">{formatNumber(requestCountReport?.totalRequests)}</p>
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Registradas en el sistema
+                </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-gradient-to-br from-amber-50 to-white">
             <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-amber-50 p-3 rounded-full">
-                  <Clock className="h-6 w-6 text-amber-600" />
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-amber-500/10 p-4 rounded-2xl ring-4 ring-amber-500/5">
+                  <Clock className="h-7 w-7 text-amber-600" />
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-dr-dark-gray">Solicitudes Pendientes</h3>
-                  <p className="text-2xl font-bold text-amber-600">{formatNumber(requestCountReport?.pendingRequests)}</p>
-                  <p className="text-sm text-gray-600">Por asignar</p>
+                <div className="bg-amber-500/10 px-3 py-1 rounded-full">
+                  <span className="text-xs font-bold text-amber-600">PENDIENTES</span>
                 </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-1">Solicitudes Pendientes</h3>
+                <p className="text-4xl font-bold text-amber-600 mb-1">{formatNumber(requestCountReport?.pendingRequests)}</p>
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Requieren asignación
+                </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Admin-only stat */}
+          {/* Admin-only stat with enhanced design */}
           {isAdmin && (
-            <Card>
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-gradient-to-br from-green-50 to-white">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="bg-green-50 p-3 rounded-full">
-                    <Users className="h-6 w-6 text-green-600" />
+                <div className="flex items-start justify-between mb-4">
+                  <div className="bg-green-500/10 p-4 rounded-2xl ring-4 ring-green-500/5">
+                    <Users className="h-7 w-7 text-green-600" />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-dr-dark-gray">Usuarios Activos</h3>
-                    <p className="text-2xl font-bold text-green-600">{formatNumber(activeUsersReport?.totalActiveUsers)}</p>
-                    <p className="text-sm text-gray-600">En el sistema</p>
+                  <div className="bg-green-500/10 px-3 py-1 rounded-full">
+                    <span className="text-xs font-bold text-green-600">ACTIVOS</span>
                   </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-1">Usuarios Activos</h3>
+                  <p className="text-4xl font-bold text-green-600 mb-1">{formatNumber(activeUsersReport?.totalActiveUsers)}</p>
+                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                    <UserPlus className="h-3 w-3" />
+                    Usuarios en el sistema
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -6728,354 +6757,429 @@ export function ReportsPage({ currentUser, authToken }: PageProps) {
         </div>
       )}
 
-      {/* Report Generation */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Generar Reportes</CardTitle>
-          <CardDescription>
-            Seleccione el tipo de reporte que desea generar
-          </CardDescription>
+      {/* Report Generation with enhanced design */}
+      <Card className="border-0 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+          <div className="flex items-center gap-3">
+            <div className="bg-dr-blue/10 p-2 rounded-lg">
+              <FileText className="h-5 w-5 text-dr-blue" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Generar Reportes</CardTitle>
+              <CardDescription className="mt-1">
+                Seleccione el período y tipo de reporte que desea generar
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-            <div className="flex flex-wrap gap-3 items-center">
-              <div>
-                <span className="block text-xs uppercase text-gray-500 mb-1">Año</span>
-                <Select
-                  value={String(selectedYear)}
-                  onValueChange={(value) => {
-                    const parsed = Number.parseInt(value, 10);
-                    if (!Number.isNaN(parsed)) {
-                      setSelectedYear(parsed);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Seleccione un año" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableYears.map((year) => (
-                      <SelectItem key={year} value={String(year)}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        <CardContent className="pt-6">
+          {/* Period Selector with enhanced design */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 mb-8 border border-blue-100">
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="h-5 w-5 text-dr-blue" />
+              <h3 className="font-semibold text-dr-dark-gray">Selección de Período</h3>
+            </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-wrap gap-4 items-end">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-700 mb-2">
+                    Año
+                  </label>
+                  <Select
+                    value={String(selectedYear)}
+                    onValueChange={(value) => {
+                      const parsed = Number.parseInt(value, 10);
+                      if (!Number.isNaN(parsed)) {
+                        setSelectedYear(parsed);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[150px] bg-white border-gray-300 shadow-sm">
+                      <SelectValue placeholder="Seleccione un año" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableYears.map((year) => (
+                        <SelectItem key={year} value={String(year)}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-700 mb-2">
+                    Mes
+                  </label>
+                  <Select
+                    value={String(selectedMonth)}
+                    onValueChange={(value) => {
+                      const parsed = Number.parseInt(value, 10);
+                      if (!Number.isNaN(parsed)) {
+                        setSelectedMonth(parsed);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[170px] bg-white border-gray-300 shadow-sm">
+                      <SelectValue placeholder="Seleccione un mes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthOptions.map((option) => (
+                        <SelectItem key={option.value} value={String(option.value)}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <span className="block text-xs uppercase text-gray-500 mb-1">Mes</span>
-                <Select
-                  value={String(selectedMonth)}
-                  onValueChange={(value) => {
-                    const parsed = Number.parseInt(value, 10);
-                    if (!Number.isNaN(parsed)) {
-                      setSelectedMonth(parsed);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="Seleccione un mes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {monthOptions.map((option) => (
-                      <SelectItem key={option.value} value={String(option.value)}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-2 text-xs text-gray-600 bg-white/60 backdrop-blur-sm px-4 py-3 rounded-lg border border-blue-200 max-w-md">
+                <Info className="h-4 w-4 text-dr-blue flex-shrink-0" />
+                <span>Los reportes se generan según el período seleccionado</span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 max-w-xs">
-              Los reportes se generan usando el año y mes seleccionados. Si un período devuelve error,
-              intente con otro disponible.
-            </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="border-2 border-dashed border-gray-200 hover:border-dr-blue transition-colors">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <FileText className="h-8 w-8 text-dr-blue flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-dr-dark-gray">Reporte Mensual de Solicitudes</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Solicitudes del mes actual con desglose por estado y tipo
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <Button
-                        size="sm"
-                        onClick={handleViewMonthlyReport}
-                        className="bg-dr-blue hover:bg-dr-blue-dark"
-                        disabled={reportActionLoading === 'view-monthly'}
-                      >
-                        {reportActionLoading === 'view-monthly' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Generando...
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadPDF('monthly-requests')}
-                        disabled={reportActionLoading === 'pdf-monthly-requests'}
-                      >
-                        {reportActionLoading === 'pdf-monthly-requests' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadExcel('monthly-requests')}
-                        disabled={reportActionLoading === 'excel-monthly-requests'}
-                      >
-                        {reportActionLoading === 'excel-monthly-requests' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <FileSpreadsheet className="h-4 w-4 mr-1" />
-                            Excel
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="border-2 border-dashed border-gray-200 hover:border-green-600 transition-colors">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <TrendingUp className="h-8 w-8 text-green-600 flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-dr-dark-gray">Reporte Anual de Solicitudes</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Análisis anual con desglose mensual de solicitudes
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <Button
-                        size="sm"
-                        onClick={handleViewAnnualReport}
-                        className="bg-green-600 hover:bg-green-700"
-                        disabled={reportActionLoading === 'view-annual'}
-                      >
-                        {reportActionLoading === 'view-annual' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Generando...
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadPDF('annual-requests')}
-                        disabled={reportActionLoading === 'pdf-annual-requests'}
-                      >
-                        {reportActionLoading === 'pdf-annual-requests' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownloadExcel('annual-requests')}
-                        disabled={reportActionLoading === 'excel-annual-requests'}
-                      >
-                        {reportActionLoading === 'excel-annual-requests' ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <FileSpreadsheet className="h-4 w-4 mr-1" />
-                            Excel
-                          </>
-                        )}
-                      </Button>
+          {/* Reports Grid */}
+          <div>
+            <div className="flex items-center gap-2 mb-6">
+              <div className="h-1 w-1 rounded-full bg-dr-blue"></div>
+              <h3 className="font-semibold text-gray-700">Reportes Disponibles</h3>
+              <div className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent"></div>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="group relative overflow-hidden border-2 border-gray-200 hover:border-dr-blue hover:shadow-xl transition-all duration-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-dr-blue/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <CardContent className="p-6 relative">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-dr-blue/10 p-3 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                      <FileText className="h-7 w-7 text-dr-blue" />
                     </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Admin-only reports */}
-            {isAdmin && (
-              <>
-                <Card className="border-2 border-dashed border-gray-200 hover:border-amber-600 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <Users className="h-8 w-8 text-amber-600 flex-shrink-0 mt-1" />
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios Activos</h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Usuarios activos agrupados por departamento y provincia
-                        </p>
-                        <div className="flex gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            onClick={handleViewActiveUsersReport}
-                            className="bg-amber-600 hover:bg-amber-700"
-                            disabled={reportActionLoading === 'view-active-users'}
-                          >
-                            {reportActionLoading === 'view-active-users' ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                                Generando...
-                              </>
-                            ) : (
-                              <>
-                                <Eye className="h-4 w-4 mr-1" />
-                                Ver
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownloadPDF('active-users')}
-                            disabled={reportActionLoading === 'pdf-active-users'}
-                          >
-                            {reportActionLoading === 'pdf-active-users' ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                                Descargando...
-                              </>
-                            ) : (
-                              <>
-                                <Download className="h-4 w-4 mr-1" />
-                                PDF
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownloadExcel('active-users')}
-                            disabled={reportActionLoading === 'excel-active-users'}
-                          >
-                            {reportActionLoading === 'excel-active-users' ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                                Descargando...
-                              </>
-                            ) : (
-                              <>
-                                <FileSpreadsheet className="h-4 w-4 mr-1" />
-                                Excel
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-bold text-dr-dark-gray group-hover:text-dr-blue transition-colors">
+                          Reporte Mensual de Solicitudes
+                        </h3>
+                        <span className="text-xs font-semibold text-dr-blue bg-dr-blue/10 px-2 py-1 rounded-full">
+                          MENSUAL
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Desglose detallado por estado y tipo de solicitud
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleViewMonthlyReport}
+                          className="bg-dr-blue hover:bg-blue-700 shadow-sm"
+                          disabled={reportActionLoading === 'view-monthly'}
+                        >
+                          {reportActionLoading === 'view-monthly' ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                              Generando...
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-4 w-4 mr-1.5" />
+                              Ver Reporte
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDownloadPDF('monthly-requests')}
+                          disabled={reportActionLoading === 'pdf-monthly-requests'}
+                          className="border-dr-blue/30 hover:bg-dr-blue/5"
+                        >
+                          {reportActionLoading === 'pdf-monthly-requests' ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                              Descargando...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4 mr-1.5" />
+                              PDF
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDownloadExcel('monthly-requests')}
+                          disabled={reportActionLoading === 'excel-monthly-requests'}
+                          className="border-green-600/30 hover:bg-green-50"
+                        >
+                          {reportActionLoading === 'excel-monthly-requests' ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                              Descargando...
+                            </>
+                          ) : (
+                            <>
+                              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                              Excel
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <Card className="border-2 border-dashed border-gray-200 hover:border-purple-600 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <ClipboardList className="h-8 w-8 text-purple-600 flex-shrink-0 mt-1" />
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-dr-dark-gray">Reporte de Usuarios por Roles</h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Distribución de usuarios agrupados por roles del sistema
-                        </p>
-                        <div className="flex gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            onClick={handleViewUsersByRoleReport}
-                            className="bg-purple-600 hover:bg-purple-700"
-                            disabled={reportActionLoading === 'view-users-by-role'}
-                          >
-                            {reportActionLoading === 'view-users-by-role' ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                                Generando...
-                              </>
-                            ) : (
-                              <>
-                                <Eye className="h-4 w-4 mr-1" />
-                                Ver
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownloadPDF('users-by-role')}
-                            disabled={reportActionLoading === 'pdf-users-by-role'}
-                          >
-                            {reportActionLoading === 'pdf-users-by-role' ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                                Descargando...
-                              </>
-                            ) : (
-                              <>
-                                <Download className="h-4 w-4 mr-1" />
-                                PDF
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownloadExcel('users-by-role')}
-                            disabled={reportActionLoading === 'excel-users-by-role'}
-                          >
-                            {reportActionLoading === 'excel-users-by-role' ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                                Descargando...
-                              </>
-                            ) : (
-                              <>
-                                <FileSpreadsheet className="h-4 w-4 mr-1" />
-                                Excel
-                              </>
-                            )}
-                          </Button>
-                        </div>
+              <Card className="group relative overflow-hidden border-2 border-gray-200 hover:border-green-600 hover:shadow-xl transition-all duration-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <CardContent className="p-6 relative">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-green-500/10 p-3 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                      <TrendingUp className="h-7 w-7 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-bold text-dr-dark-gray group-hover:text-green-600 transition-colors">
+                          Reporte Anual de Solicitudes
+                        </h3>
+                        <span className="text-xs font-semibold text-green-600 bg-green-500/10 px-2 py-1 rounded-full">
+                          ANUAL
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Análisis completo con desglose mensual del año
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleViewAnnualReport}
+                          className="bg-green-600 hover:bg-green-700 shadow-sm"
+                          disabled={reportActionLoading === 'view-annual'}
+                        >
+                          {reportActionLoading === 'view-annual' ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                              Generando...
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-4 w-4 mr-1.5" />
+                              Ver Reporte
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDownloadPDF('annual-requests')}
+                          disabled={reportActionLoading === 'pdf-annual-requests'}
+                          className="border-dr-blue/30 hover:bg-dr-blue/5"
+                        >
+                          {reportActionLoading === 'pdf-annual-requests' ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                              Descargando...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4 mr-1.5" />
+                              PDF
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDownloadExcel('annual-requests')}
+                          disabled={reportActionLoading === 'excel-annual-requests'}
+                          className="border-green-600/30 hover:bg-green-50"
+                        >
+                          {reportActionLoading === 'excel-annual-requests' ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                              Descargando...
+                            </>
+                          ) : (
+                            <>
+                              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                              Excel
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Admin-only reports */}
+              {isAdmin && (
+                <>
+                  <Card className="group relative overflow-hidden border-2 border-gray-200 hover:border-amber-600 hover:shadow-xl transition-all duration-300">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                    <div className="absolute top-2 right-2 bg-amber-500/10 px-2.5 py-1 rounded-full">
+                      <span className="text-xs font-bold text-amber-600">ADMIN</span>
+                    </div>
+                    <CardContent className="p-6 relative">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-amber-500/10 p-3 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                          <Users className="h-7 w-7 text-amber-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="font-bold text-dr-dark-gray group-hover:text-amber-600 transition-colors">
+                              Reporte de Usuarios Activos
+                            </h3>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Usuarios activos agrupados por departamento y provincia
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleViewActiveUsersReport}
+                              className="bg-amber-600 hover:bg-amber-700 shadow-sm"
+                              disabled={reportActionLoading === 'view-active-users'}
+                            >
+                              {reportActionLoading === 'view-active-users' ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                                  Generando...
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="h-4 w-4 mr-1.5" />
+                                  Ver Reporte
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadPDF('active-users')}
+                              disabled={reportActionLoading === 'pdf-active-users'}
+                              className="border-dr-blue/30 hover:bg-dr-blue/5"
+                            >
+                              {reportActionLoading === 'pdf-active-users' ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                                  Descargando...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="h-4 w-4 mr-1.5" />
+                                  PDF
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadExcel('active-users')}
+                              disabled={reportActionLoading === 'excel-active-users'}
+                              className="border-green-600/30 hover:bg-green-50"
+                            >
+                              {reportActionLoading === 'excel-active-users' ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                                  Descargando...
+                                </>
+                              ) : (
+                                <>
+                                  <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                                  Excel
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="group relative overflow-hidden border-2 border-gray-200 hover:border-purple-600 hover:shadow-xl transition-all duration-300">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                    <div className="absolute top-2 right-2 bg-purple-500/10 px-2.5 py-1 rounded-full">
+                      <span className="text-xs font-bold text-purple-600">ADMIN</span>
+                    </div>
+                    <CardContent className="p-6 relative">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-purple-500/10 p-3 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                          <ClipboardList className="h-7 w-7 text-purple-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="font-bold text-dr-dark-gray group-hover:text-purple-600 transition-colors">
+                              Reporte de Usuarios por Roles
+                            </h3>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Distribución de usuarios agrupados por roles del sistema
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleViewUsersByRoleReport}
+                              className="bg-purple-600 hover:bg-purple-700 shadow-sm"
+                              disabled={reportActionLoading === 'view-users-by-role'}
+                            >
+                              {reportActionLoading === 'view-users-by-role' ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                                  Generando...
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="h-4 w-4 mr-1.5" />
+                                  Ver Reporte
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadPDF('users-by-role')}
+                              disabled={reportActionLoading === 'pdf-users-by-role'}
+                              className="border-dr-blue/30 hover:bg-dr-blue/5"
+                            >
+                              {reportActionLoading === 'pdf-users-by-role' ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                                  Descargando...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="h-4 w-4 mr-1.5" />
+                                  PDF
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadExcel('users-by-role')}
+                              disabled={reportActionLoading === 'excel-users-by-role'}
+                              className="border-green-600/30 hover:bg-green-50"
+                            >
+                              {reportActionLoading === 'excel-users-by-role' ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                                  Descargando...
+                                </>
+                              ) : (
+                                <>
+                                  <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                                  Excel
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
