@@ -6,6 +6,13 @@ import {
   assignRequest,
   getAssignableUsers,
   unassignRequest,
+  updateRequestStatus,
+  changeRequestStatus,
+  approveRequest,
+  rejectRequest,
+  completeRequest,
+  cancelRequest,
+  reviewRequest,
   getRequestCountReport,
   getMonthlyRequestReport,
   getAnnualRequestReport,
@@ -175,46 +182,59 @@ const getRequestTypeName = (type: string) => {
 const getStatusBadge = (status: string | number) => {
   // Convertir número a string si es necesario
   const statusStr = typeof status === 'number' ? String(status) : status;
-  
-  // Mapeo de números a estados
+
+  // Mapeo de números y estados en inglés a estados normalizados (basado en BeneficiaryRequestStatus.cs)
   const statusMap: Record<string, string> = {
-    '0': 'pending',
-    '1': 'assigned',
-    '2': 'review',
-    '3': 'approved',
-    '4': 'rejected',
+    '1': 'pending',     // Pendiente
+    '2': 'review',      // En Revisión
+    '3': 'approved',    // Aprobada
+    '4': 'rejected',    // Rechazada
+    '5': 'completed',   // Completada
+    '6': 'cancelled',   // Cancelada
+    // Mapeo de estados en inglés
+    'Approved': 'approved',
+    'Pending': 'pending',
+    'Review': 'review',
+    'Rejected': 'rejected',
+    'Completed': 'completed',
+    'Cancelled': 'cancelled',
   };
-  
-  const normalizedStatus = statusMap[statusStr] || statusStr;
-  
+
+  const normalizedStatus = statusMap[statusStr] || statusStr.toLowerCase();
+
   switch (normalizedStatus) {
-    case 'approved':
-      return <Badge className="bg-green-100 text-green-800 border-green-200">
-        <CheckCircle className="h-3 w-3 mr-1" />
-        Aprobado
-      </Badge>;
     case 'pending':
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-200">
-        <Clock className="h-3 w-3 mr-1" />
+      return <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20 font-semibold shadow-sm">
+        <Clock className="h-3.5 w-3.5 mr-1.5" />
         Pendiente
       </Badge>;
     case 'review':
-      return <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-        <Eye className="h-3 w-3 mr-1" />
+      return <Badge className="bg-blue-500/10 text-blue-700 border-blue-500/20 font-semibold shadow-sm">
+        <Eye className="h-3.5 w-3.5 mr-1.5" />
         En Revisión
       </Badge>;
-    case 'rejected':
-      return <Badge className="bg-red-100 text-red-800 border-red-200">
-        <XCircle className="h-3 w-3 mr-1" />
-        Rechazado
+    case 'approved':
+      return <Badge className="bg-green-500/10 text-green-700 border-green-500/20 font-semibold shadow-sm">
+        <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+        Aprobada
       </Badge>;
-    case 'assigned':
-      return <Badge className="bg-purple-100 text-purple-800 border-purple-200">
-        <User className="h-3 w-3 mr-1" />
-        Asignado
+    case 'rejected':
+      return <Badge className="bg-red-500/10 text-red-700 border-red-500/20 font-semibold shadow-sm">
+        <XCircle className="h-3.5 w-3.5 mr-1.5" />
+        Rechazada
+      </Badge>;
+    case 'completed':
+      return <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20 font-semibold shadow-sm">
+        <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+        Completada
+      </Badge>;
+    case 'cancelled':
+      return <Badge className="bg-gray-500/10 text-gray-700 border-gray-500/20 font-semibold shadow-sm">
+        <X className="h-3.5 w-3.5 mr-1.5" />
+        Cancelada
       </Badge>;
     default:
-      return <Badge variant="outline">{statusStr}</Badge>;
+      return <Badge variant="outline" className="shadow-sm">{statusStr}</Badge>;
   }
 };
 
@@ -424,160 +444,6 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
   const stats = getStatsForRole();
   const pendingAssignments = requestCountReport?.pendingRequests ?? 0;
 
-  // Solicitudes hardcodeadas (DEPRECATED - se eliminará)
-  const getAllRequests_OLD = () => [
-    { 
-      id: '2025-001240', 
-      applicant: 'Esperanza Reyes Núñez', 
-      cedula: '001-7890123-4',
-      status: 'rejected', 
-      date: '02/07/2025',
-      province: 'Moca',
-      type: 'document_upload',
-      address: 'Calle Principal #234, Moca',
-      phone: '809-555-7890',
-      email: 'esperanza.reyes@email.com',
-      householdSize: 4,
-      monthlyIncome: 'RD$ 28,000',
-      reason: 'Documentos vencidos',
-      description: 'Los documentos presentados han excedido su fecha de validez',
-      documents: ['Cédula vencida', 'Certificado de nacimiento'],
-      assignedTo: 'Lic. Roberto Carlos Mendoza',
-      reviewedBy: 'Lic. Roberto Carlos Mendoza',
-      reviewDate: '02/07/2025',
-      priority: 'low'
-    },
-    { 
-      id: '2025-001239', 
-      applicant: 'Roberto Méndez Castro', 
-      cedula: '001-6789012-3',
-      status: 'rejected', 
-      date: '03/07/2025',
-      province: 'La Romana',
-      type: 'info_update',
-      address: 'Av. Libertad #567, La Romana',
-      phone: '809-555-6789',
-      email: 'roberto.mendez@email.com',
-      householdSize: 3,
-      monthlyIncome: 'RD$ 45,000',
-      reason: 'Información inconsistente',
-      description: 'Los datos proporcionados no coinciden con los registros oficiales',
-      documents: ['Comprobante de ingresos', 'Actualización de datos'],
-      assignedTo: 'Lic. Ana Patricia Jiménez',
-      reviewedBy: 'Lic. Ana Patricia Jiménez',
-      reviewDate: '03/07/2025',
-      priority: 'medium'
-    },
-    { 
-      id: '2025-001234', 
-      applicant: 'María González Pérez', 
-      cedula: '001-1234567-8',
-      status: 'pending', 
-      date: '06/07/2025',
-      province: 'Santo Domingo',
-      type: 'document_upload',
-      address: 'Calle Primera #123, Los Alcarrizos',
-      phone: '809-555-1234',
-      email: 'maria.gonzalez@email.com',
-      householdSize: 4,
-      monthlyIncome: 'RD$ 15,000',
-      reason: 'Actualización de documentos de identidad',
-      description: 'Solicitud de carga de nuevos documentos de identidad para verificación. Se requiere actualizar cédula vencida y certificado de nacimiento.',
-      documents: ['Cédula nueva', 'Certificado de nacimiento', 'Comprobante de ingresos'],
-      assignedTo: null,
-      reviewedBy: null,
-      reviewDate: null,
-      priority: 'medium'
-    },
-    { 
-      id: '2025-001235', 
-      applicant: 'Juan Carlos Rodríguez', 
-      cedula: '001-2345678-9',
-      status: 'review', 
-      date: '06/07/2025',
-      province: 'Santiago',
-      type: 'info_update',
-      address: 'Av. Estrella Sadhalá #456, Santiago',
-      phone: '809-555-2345',
-      email: 'juan.rodriguez@email.com',
-      householdSize: 3,
-      monthlyIncome: 'RD$ 12,000',
-      reason: 'Cambio de información personal',
-      description: 'Actualización de datos familiares y cambio de dirección debido a mudanza reciente.',
-      documents: ['Contrato de alquiler', 'Comprobante de servicios'],
-      assignedTo: currentUser?.name,
-      reviewedBy: null,
-      reviewDate: null,
-      priority: 'high'
-    },
-    { 
-      id: '2025-001236', 
-      applicant: 'Ana Lucía Martínez', 
-      cedula: '001-3456789-0',
-      status: 'approved', 
-      date: '05/07/2025',
-      province: 'La Vega',
-      type: 'document_upload',
-      address: 'Calle Duarte #789, La Vega',
-      phone: '809-555-3456',
-      email: 'ana.martinez@email.com',
-      householdSize: 5,
-      monthlyIncome: 'RD$ 8,000',
-      reason: 'Documentos de verificación de ingresos',
-      description: 'Carga de comprobantes de ingresos actualizados según solicitud del sistema.',
-      documents: ['Carta de trabajo', 'Últimos 3 recibos de pago', 'Declaración jurada'],
-      assignedTo: 'Lic. Ana Patricia Jiménez',
-      reviewedBy: 'Lic. Ana Patricia Jiménez',
-      reviewDate: '05/07/2025',
-      priority: 'low'
-    },
-    // Solicitudes específicas para analistas
-    ...(isAnalyst ? [
-      {
-        id: '2025-001241',
-        applicant: 'Carmen Esperanza López',
-        cedula: '001-8901234-5',
-        status: 'assigned',
-        date: '07/07/2025',
-        province: 'San Pedro de Macorís',
-        type: 'benefit_application',
-        address: 'Calle Central #456, San Pedro',
-        phone: '809-555-8901',
-        email: 'carmen.lopez@email.com',
-        householdSize: 3,
-        monthlyIncome: 'RD$ 9,500',
-        reason: 'Solicitud inicial de beneficio',
-        description: 'Primera solicitud de beneficio SIUBEN para familia de 3 miembros en situación de vulnerabilidad.',
-        documents: ['Cédula', 'Certificados de nacimiento', 'Comprobante de ingresos', 'Evaluación socioeconómica'],
-        assignedTo: currentUser?.name,
-        reviewedBy: null,
-        reviewDate: null,
-        priority: 'high'
-      },
-      {
-        id: '2025-001242',
-        applicant: 'Francisco Javier Medina',
-        cedula: '001-9012345-6',
-        status: 'assigned',
-        date: '07/07/2025',
-        province: 'Monte Cristi',
-        type: 'address_change',
-        address: 'Av. Duarte #789, Monte Cristi',
-        phone: '809-555-9012',
-        email: 'francisco.medina@email.com',
-        householdSize: 5,
-        monthlyIncome: 'RD$ 14,000',
-        reason: 'Cambio de dirección familiar',
-        description: 'Solicitud de actualización de dirección debido a reubicación familiar por motivos laborales.',
-        documents: ['Contrato de alquiler nuevo', 'Comprobante de servicios', 'Declaración jurada'],
-        assignedTo: currentUser?.name,
-        reviewedBy: null,
-        reviewDate: null,
-        priority: 'medium'
-      }
-    ] : [])
-  ];
-
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
@@ -753,9 +619,14 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showUnassignModal, setShowUnassignModal] = useState(false);
+  const [showStatusChangeModal, setShowStatusChangeModal] = useState(false);
   const [selectedAnalyst, setSelectedAnalyst] = useState('');
   const [assignmentNotes, setAssignmentNotes] = useState('');
   const [unassignNotes, setUnassignNotes] = useState('');
+  const [selectedNewStatus, setSelectedNewStatus] = useState<string>('');
+  const [statusChangeNotes, setStatusChangeNotes] = useState('');
+  const [isSubmittingStatusChange, setIsSubmittingStatusChange] = useState(false);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -1026,31 +897,30 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     });
   }, [analysts, selectedRequest, showAssignModal]);
 
-  // Helper function to normalize status (convert number to string)
+  // Helper function to normalize status (convert number to string in Spanish)
   const normalizeStatus = (status: string | number): string => {
     const statusMap: Record<string, string> = {
-      '0': 'pending',
-      '1': 'assigned',
-      '2': 'review',
-      '3': 'approved',
-      '4': 'rejected',
-      pending: 'pending',
-      pendiente: 'pending',
-      pendientes: 'pending',
-      assigned: 'assigned',
-      asignado: 'assigned',
-      asignada: 'assigned',
-      asignadas: 'assigned',
-      review: 'review',
-      revision: 'review',
-      'en revision': 'review',
-      'en revisión': 'review',
-      approved: 'approved',
-      aprobado: 'approved',
-      aprobada: 'approved',
-      rejected: 'rejected',
-      rechazado: 'rejected',
-      rechazada: 'rejected',
+      '0': 'pendiente',
+      '1': 'pendiente',
+      '2': 'en revisión',
+      '3': 'aprobada',
+      '4': 'rechazada',
+      '5': 'completada',
+      '6': 'cancelada',
+      'pending': 'pendiente',
+      'pendiente': 'pendiente',
+      'assigned': 'asignada',
+      'asignada': 'asignada',
+      'review': 'en revisión',
+      'en revisión': 'en revisión',
+      'approved': 'aprobada',
+      'aprobada': 'aprobada',
+      'rejected': 'rechazada',
+      'rechazada': 'rechazada',
+      'completed': 'completada',
+      'completada': 'completada',
+      'cancelled': 'cancelada',
+      'cancelada': 'cancelada',
     };
     const raw =
       typeof status === 'number'
@@ -1387,9 +1257,159 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     }
   };
 
+  const handleStatusChange = async () => {
+    if (!selectedRequest || !authToken || !selectedNewStatus) return;
+
+    const requestId = resolveRequestId(selectedRequest);
+    if (!requestId) {
+      toast.error('No se pudo determinar la solicitud seleccionada.');
+      return;
+    }
+
+    const statusNum = parseInt(selectedNewStatus);
+    if (isNaN(statusNum) || statusNum < 1 || statusNum > 6) {
+      setStatusChangeError('Por favor seleccione un estado válido.');
+      return;
+    }
+
+    // Validate notes for rejected and cancelled statuses
+    if ((statusNum === 4 || statusNum === 6) && !statusChangeNotes.trim()) {
+      setStatusChangeError('Las notas son requeridas para estados rechazados o cancelados.');
+      return;
+    }
+
+    setIsSubmittingStatusChange(true);
+    setStatusChangeError(null);
+
+    try {
+      const updatedRequest = await updateRequestStatus(authToken, requestId, {
+        status: statusNum,
+        notes: statusChangeNotes.trim() || undefined
+      });
+
+      if (updatedRequest) {
+        // Update local state with the response from the server
+        setRequests((prev: RequestDto[]) => prev.map((req: RequestDto) =>
+          resolveRequestId(req) === requestId ? updatedRequest : req
+        ));
+
+        // Get status name for toast message
+        const statusNames: Record<number, string> = {
+          1: 'Pendiente',
+          2: 'En Revisión',
+          3: 'Aprobada',
+          4: 'Rechazada',
+          5: 'Completada',
+          6: 'Cancelada'
+        };
+
+        toast.success(`Solicitud actualizada a: ${statusNames[statusNum]}`);
+      }
+
+      setShowStatusChangeModal(false);
+      setSelectedNewStatus('');
+      setStatusChangeNotes('');
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error('Error cambiando estado de solicitud', error);
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : error instanceof Error && error.message
+            ? error.message
+            : 'No se pudo cambiar el estado de la solicitud. Intente nuevamente.';
+      setStatusChangeError(message);
+    } finally {
+      setIsSubmittingStatusChange(false);
+    }
+  };
+
+  // Quick action handlers using specific endpoints
+  const handleQuickStatusAction = async (action: 'approve' | 'reject' | 'review' | 'complete' | 'cancel', notes?: string) => {
+    if (!selectedRequest || !authToken) return;
+
+    const requestId = resolveRequestId(selectedRequest);
+    if (!requestId) {
+      toast.error('No se pudo determinar la solicitud seleccionada.');
+      return;
+    }
+
+    // Validate notes for reject and cancel actions
+    if ((action === 'reject' || action === 'cancel') && !notes?.trim()) {
+      setStatusChangeError(`Las notas son requeridas para ${action === 'reject' ? 'rechazar' : 'cancelar'} una solicitud.`);
+      return;
+    }
+
+    setIsSubmittingStatusChange(true);
+    setStatusChangeError(null);
+
+    try {
+      let updatedRequest: RequestDto | null = null;
+      const actionPayload = { notes: notes?.trim() || undefined };
+
+      switch (action) {
+        case 'approve':
+          updatedRequest = await approveRequest(authToken, requestId, actionPayload);
+          break;
+        case 'reject':
+          updatedRequest = await rejectRequest(authToken, requestId, actionPayload);
+          break;
+        case 'review':
+          updatedRequest = await reviewRequest(authToken, requestId, actionPayload);
+          break;
+        case 'complete':
+          updatedRequest = await completeRequest(authToken, requestId, actionPayload);
+          break;
+        case 'cancel':
+          updatedRequest = await cancelRequest(authToken, requestId, actionPayload);
+          break;
+      }
+
+      if (updatedRequest) {
+        setRequests((prev: RequestDto[]) => prev.map((req: RequestDto) =>
+          resolveRequestId(req) === requestId ? updatedRequest : req
+        ));
+      }
+
+      // Action name translations
+      const actionNames: Record<string, string> = {
+        approve: 'Aprobada',
+        reject: 'Rechazada',
+        review: 'En Revisión',
+        complete: 'Completada',
+        cancel: 'Cancelada'
+      };
+
+      toast.success(`Solicitud ${actionNames[action]}`, {
+        description: `Solicitud #${requestId.substring(0, 8)} actualizada correctamente`,
+        duration: 4000,
+      });
+
+      // Reload requests to get fresh data
+      await loadRequests();
+
+      setShowStatusChangeModal(false);
+      setSelectedNewStatus('');
+      setStatusChangeNotes('');
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error(`Error executing ${action} action:`, error);
+      const message =
+        error instanceof ApiError && error.message
+          ? error.message
+          : error instanceof Error && error.message
+            ? error.message
+            : `No se pudo ${action === 'approve' ? 'aprobar' : action === 'reject' ? 'rechazar' : action === 'review' ? 'poner en revisión' : action === 'complete' ? 'completar' : 'cancelar'} la solicitud. Intente nuevamente.`;
+      setStatusChangeError(message);
+      toast.error(message);
+    } finally {
+      setIsSubmittingStatusChange(false);
+    }
+  };
+
   const handleUpdateRequestStatus = (requestId: string, newStatus: string, notes?: string) => {
-    setRequests(prev => prev.map(req => 
-      req.id === requestId 
+    setRequests(prev => prev.map(req =>
+      req.id === requestId
         ? {
             ...req,
             status: newStatus,
@@ -1404,18 +1424,20 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   };
 
   // Get count of unassigned requests for managers/admins
-  const unassignedCount = (isSupervisorRole || isAdminRole) 
-    ? requests.filter((req) => normalizeStatus(req.status) === 'pending' && !resolveRequestAssigneeName(req)).length 
+  const unassignedCount = (isSupervisorRole || isAdminRole)
+    ? requests.filter((req) => normalizeStatus(req.status) === 'pendiente' && !resolveRequestAssigneeName(req)).length
     : 0;
 
   const statusSummary = useMemo(() => {
     const summary = {
       total: requests.length,
-      pending: 0,
-      assigned: 0,
-      review: 0,
-      approved: 0,
-      rejected: 0,
+      pendiente: 0,
+      asignada: 0,
+      'en revisión': 0,
+      aprobada: 0,
+      rechazada: 0,
+      completada: 0,
+      cancelada: 0,
     };
 
     for (const request of requests) {
@@ -1440,7 +1462,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       {
         key: 'in-progress',
         label: 'En proceso',
-        value: statusSummary.pending + statusSummary.review,
+        value: statusSummary.pendiente + statusSummary['en revisión'],
         helper: 'Pendientes y en revisión',
         accent: 'from-amber-400 via-orange-500 to-pink-500',
       },
@@ -1450,10 +1472,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
   const quickStatusFilters = [
     { label: 'Todas', value: 'all' },
-    { label: 'Pendientes', value: 'pending' },
-    { label: 'Asignadas', value: 'assigned' },
-    { label: 'En revisión', value: 'review' },
-    { label: 'Aprobadas', value: 'approved' },
+    { label: 'Pendientes', value: 'pendiente' },
+    { label: 'Asignadas', value: 'asignada' },
+    { label: 'En revisión', value: 'en revisión' },
+    { label: 'Aprobadas', value: 'aprobada' },
   ];
 
   return (
@@ -1519,7 +1541,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 onClick={() => {
                   const firstPending = requests.find(
                     (request) =>
-                      normalizeStatus(request.status) === 'pending' &&
+                      normalizeStatus(request.status) === 'pendiente' &&
                       !resolveRequestAssigneeName(request),
                   );
                   if (firstPending) {
@@ -1718,17 +1740,6 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   <TableRow>
                     <TableHead
                       className="cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleSort('id')}
-                    >
-                      <div className="flex items-center gap-1">
-                        ID
-                        {sortField === 'id' && (
-                          sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer hover:bg-gray-50"
                       onClick={() => handleSort('applicant')}
                     >
                       <div className="flex items-center gap-1">
@@ -1781,14 +1792,6 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 <TableBody>
                   {paginatedRequests.map((request) => (
                   <TableRow key={request.id}>
-                    <TableCell className="font-medium text-dr-blue">
-                      <div className="space-y-0.5">
-                        <div>#{request.id?.substring(0, 8)}</div>
-                        {request.externalReference && (
-                          <div className="text-xs text-gray-500">{request.externalReference}</div>
-                        )}
-                      </div>
-                    </TableCell>
                     <TableCell>
                       <div>
                         <p className="font-medium">
@@ -1838,7 +1841,26 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        
+
+                        {/* Status change button for supervisors and admins */}
+                        {(isSupervisorRole || isAdminRole) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedRequest(request);
+                              setSelectedNewStatus(String(request.status) || '1');
+                              setStatusChangeNotes('');
+                              setStatusChangeError(null);
+                              setShowStatusChangeModal(true);
+                            }}
+                            className="text-indigo-600 hover:bg-indigo-50"
+                            title="Cambiar estado"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        )}
+
                         {/* Botón para ver beneficiario relacionado (solo para analistas con solicitudes asignadas) */}
                         {(() => {
                           const assigneeName = resolveRequestAssigneeName(request);
@@ -1864,16 +1886,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                             </Button>
                           );
                         })()}
-                        
+
                         {/* Assignment button for managers */}
                         {(() => {
                           const assigneeName = resolveRequestAssigneeName(request);
                           const isManager = isSupervisorRole || isAdminRole;
                           const isUnassigned = !assigneeName;
                           const canAssign = isManager && (
-                            normalizeStatus(request.status) === 'pending' || 
-                            normalizeStatus(request.status) === 'assigned' ||
-                            normalizeStatus(request.status) === 'review'
+                            normalizeStatus(request.status) === 'pendiente' ||
+                            normalizeStatus(request.status) === 'asignada' ||
+                            normalizeStatus(request.status) === 'en revisión'
                           );
 
                           return canAssign && (
@@ -1899,8 +1921,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                           const isManager = isSupervisorRole || isAdminRole;
                           const isAssigned = !!assigneeName;
                           const canUnassign = isManager && isAssigned && (
-                            normalizeStatus(request.status) === 'assigned' ||
-                            normalizeStatus(request.status) === 'review'
+                            normalizeStatus(request.status) === 'asignada' ||
+                            normalizeStatus(request.status) === 'en revisión'
                           );
 
                           return canUnassign && (
@@ -1934,20 +1956,19 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     {/* Header Row */}
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-dr-blue text-sm">#{request.id?.substring(0, 8)}</span>
+                        <div className="flex items-center gap-2 mb-2">
                           {getStatusBadge(request.status)}
                         </div>
-                        <p className="font-medium text-base text-dr-dark-gray">
+                        <p className="font-semibold text-lg text-dr-dark-gray">
                           {request.beneficiary
                             ? `${request.beneficiary.firstName || ''} ${request.beneficiary.lastName || ''}`.trim()
                             : request.applicant || 'N/A'}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-500 mt-1">
                           {request.beneficiary?.nationalId || request.cedula || 'N/A'}
                         </p>
                         {request.externalReference && (
-                          <p className="text-xs text-gray-400 mt-1">{request.externalReference}</p>
+                          <p className="text-xs text-gray-400 mt-1">Ref: {request.externalReference}</p>
                         )}
                       </div>
                     </div>
@@ -1998,9 +2019,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         const assigneeName = resolveRequestAssigneeName(request);
                         const isManager = isSupervisorRole || isAdminRole;
                         const canAssign = isManager && (
-                          normalizeStatus(request.status) === 'pending' ||
-                          normalizeStatus(request.status) === 'assigned' ||
-                          normalizeStatus(request.status) === 'review'
+                          normalizeStatus(request.status) === 'pendiente' ||
+                          normalizeStatus(request.status) === 'asignada' ||
+                          normalizeStatus(request.status) === 'en revisión'
                         );
 
                         return canAssign && (
@@ -2355,6 +2376,171 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             >
               {isSubmittingAssignment ? 'Desasignando...' : 'Desasignar Solicitud'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status Change Modal - Enhanced with Quick Actions */}
+      <Dialog open={showStatusChangeModal} onOpenChange={setShowStatusChangeModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-indigo-600" />
+              Cambiar Estado de Solicitud
+            </DialogTitle>
+            <DialogDescription>
+              Actualice el estado de la solicitud #{selectedRequest?.id?.substring(0, 8)}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Request Info */}
+            {selectedRequest && (
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Solicitante:</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {selectedRequest.beneficiary
+                        ? `${selectedRequest.beneficiary.firstName || ''} ${selectedRequest.beneficiary.lastName || ''}`.trim()
+                        : selectedRequest.applicant || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Tipo:</span>
+                    <span className="text-sm text-gray-900">
+                      {selectedRequest.requestTypeNameSpanish || selectedRequest.requestTypeName || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Estado Actual:</span>
+                    <div>{getStatusBadge(selectedRequest.status)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Error Alert */}
+            {statusChangeError && (
+              <Alert className="bg-red-50 border-red-200">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800 text-sm ml-2">
+                  {statusChangeError}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Status Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="status-select">Estado</Label>
+              <Select value={selectedNewStatus} onValueChange={setSelectedNewStatus}>
+                <SelectTrigger id="status-select" className="w-full">
+                  <SelectValue placeholder="Seleccione un estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      <span>Pendiente</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="2">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-blue-600" />
+                      <span>En Revisión</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span>Aprobada</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="4">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-red-600" />
+                      <span>Rechazada</span>
+                    </div>
+                  </SelectItem>
+                  {isAdminRole && (
+                    <>
+                      <SelectItem value="5">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <span>Completada</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="6">
+                        <div className="flex items-center gap-2">
+                          <X className="h-4 w-4 text-gray-600" />
+                          <span>Cancelada</span>
+                        </div>
+                      </SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="status-notes">
+                Comentarios
+                {(selectedNewStatus === '4' || selectedNewStatus === '6') && (
+                  <span className="text-red-600 ml-1">*</span>
+                )}
+              </Label>
+              <Textarea
+                id="status-notes"
+                placeholder={
+                  selectedNewStatus === '4'
+                    ? 'Explique las razones del rechazo...'
+                    : selectedNewStatus === '6'
+                      ? 'Explique las razones de la cancelación...'
+                      : 'Agregue comentarios sobre el cambio de estado (opcional)...'
+                }
+                value={statusChangeNotes}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStatusChangeNotes(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+              {(selectedNewStatus === '4' || selectedNewStatus === '6') && (
+                <p className="text-xs text-red-500 font-medium">
+                  Los comentarios son requeridos para acciones de rechazo o cancelación.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowStatusChangeModal(false);
+                setStatusChangeError(null);
+                setStatusChangeNotes('');
+                setSelectedNewStatus('');
+              }}
+              disabled={isSubmittingStatusChange}
+            >
+              Cerrar
+            </Button>
+            {selectedNewStatus && (
+              <Button
+                onClick={handleStatusChange}
+                disabled={isSubmittingStatusChange || !selectedNewStatus}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                {isSubmittingStatusChange ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Actualizando...
+                  </span>
+                ) : (
+                  'Aplicar Estado Manual'
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

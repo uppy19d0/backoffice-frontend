@@ -1064,6 +1064,106 @@ export async function unassignRequest(
   });
 }
 
+export interface UpdateRequestStatusPayload extends Record<string, unknown> {
+  status: number;
+  notes?: string;
+}
+
+export async function updateRequestStatus(
+  token: string,
+  requestId: string,
+  payload: UpdateRequestStatusPayload
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/status`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+// Generic endpoint to change status using any valid status string
+export interface ChangeRequestStatusPayload extends Record<string, unknown> {
+  status: string;
+  notes?: string;
+}
+
+export async function changeRequestStatus(
+  token: string,
+  requestId: string,
+  payload: ChangeRequestStatusPayload
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/status`, {
+    method: 'PATCH',
+    token,
+    body: payload,
+  });
+}
+
+// Specific action endpoints
+export interface RequestActionPayload extends Record<string, unknown> {
+  notes?: string;
+}
+
+export async function approveRequest(
+  token: string,
+  requestId: string,
+  payload: RequestActionPayload = {}
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/approve`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+export async function rejectRequest(
+  token: string,
+  requestId: string,
+  payload: RequestActionPayload = {}
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/reject`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+export async function completeRequest(
+  token: string,
+  requestId: string,
+  payload: RequestActionPayload = {}
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/complete`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+export async function cancelRequest(
+  token: string,
+  requestId: string,
+  payload: RequestActionPayload = {}
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/cancel`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+export async function reviewRequest(
+  token: string,
+  requestId: string,
+  payload: RequestActionPayload = {}
+): Promise<RequestDto | null> {
+  return apiFetch<RequestDto | null>(`/requests/${encodeURIComponent(requestId)}/review`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
 // Report DTOs matching backend
 export interface RequestCountReportDto extends Record<string, unknown> {
   totalRequests?: number;
