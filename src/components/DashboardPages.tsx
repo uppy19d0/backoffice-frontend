@@ -3858,6 +3858,61 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
     });
   }, [notifications, searchTerm, typeFilter, priorityFilter, statusFilter, dateFilter]);
 
+  // Agrupar notificaciones por fecha
+  const groupedNotifications = useMemo(() => {
+    const groups: { today: typeof filteredNotifications; yesterday: typeof filteredNotifications; thisWeek: typeof filteredNotifications; older: typeof filteredNotifications } = {
+      today: [],
+      yesterday: [],
+      thisWeek: [],
+      older: []
+    };
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    filteredNotifications.forEach(notification => {
+      const notificationDate = new Date(notification.createdAt);
+
+      if (notificationDate >= todayStart) {
+        groups.today.push(notification);
+      } else if (notificationDate >= yesterdayStart) {
+        groups.yesterday.push(notification);
+      } else if (notificationDate >= weekStart) {
+        groups.thisWeek.push(notification);
+      } else {
+        groups.older.push(notification);
+      }
+    });
+
+    return groups;
+  }, [filteredNotifications]);
+
+  // Estadísticas por tipo
+  const notificationsByType = useMemo(() => {
+    const typeCount: Record<string, number> = {};
+    filteredNotifications.forEach(n => {
+      typeCount[n.type] = (typeCount[n.type] || 0) + 1;
+    });
+    return Object.entries(typeCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+  }, [filteredNotifications]);
+
+  // Estadísticas por prioridad
+  const priorityStats = useMemo(() => {
+    const stats = { high: 0, medium: 0, low: 0 };
+    filteredNotifications.forEach(n => {
+      if (n.priority in stats) {
+        stats[n.priority as keyof typeof stats]++;
+      }
+    });
+    return stats;
+  }, [filteredNotifications]);
+
   // Obtener tipos únicos de notificaciones
   const notificationTypes = useMemo(() => {
     const types = new Set(notifications.map(n => n.type));
@@ -4184,6 +4239,106 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
               );
             })}
           </div>
+
+          {/* Estadísticas visuales de tipos y prioridades */}
+          {notificationsByType.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="border-purple-100 bg-gradient-to-br from-purple-50/50 to-white shadow-md">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold text-dr-dark-gray flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-purple-600" />
+                    Tipos Principales
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {notificationsByType.map(([type, count], index) => {
+                      const percentage = (count / filteredNotifications.length) * 100;
+                      const typeConfig = getTypeConfig(type);
+                      return (
+                        <div key={type} className="space-y-1.5">
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${typeConfig.badgeClass} text-xs font-medium`}>
+                                {typeConfig.icon}
+                                {typeConfig.label}
+                              </span>
+                            </div>
+                            <span className="font-bold text-dr-dark-gray">{count}</span>
+                          </div>
+                          <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`absolute inset-y-0 left-0 bg-gradient-to-r ${index === 0 ? 'from-purple-500 to-purple-400' : index === 1 ? 'from-blue-500 to-blue-400' : index === 2 ? 'from-amber-500 to-amber-400' : 'from-green-500 to-green-400'} transition-all duration-500`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500">{percentage.toFixed(1)}% del total</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-amber-100 bg-gradient-to-br from-amber-50/50 to-white shadow-md">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold text-dr-dark-gray flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    Distribución por Prioridad
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                          <span className="font-medium">Alta</span>
+                        </span>
+                        <span className="font-bold text-dr-dark-gray">{priorityStats.high}</span>
+                      </div>
+                      <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500 to-red-400 transition-all duration-500"
+                          style={{ width: `${filteredNotifications.length ? (priorityStats.high / filteredNotifications.length) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                          <span className="font-medium">Media</span>
+                        </span>
+                        <span className="font-bold text-dr-dark-gray">{priorityStats.medium}</span>
+                      </div>
+                      <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-500 to-yellow-400 transition-all duration-500"
+                          style={{ width: `${filteredNotifications.length ? (priorityStats.medium / filteredNotifications.length) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                          <span className="font-medium">Baja</span>
+                        </span>
+                        <span className="font-bold text-dr-dark-gray">{priorityStats.low}</span>
+                      </div>
+                      <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
+                          style={{ width: `${filteredNotifications.length ? (priorityStats.low / filteredNotifications.length) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
 
@@ -4340,8 +4495,17 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
               <div className="absolute left-6 top-8 bottom-8 hidden md:block">
                 <div className="h-full w-px bg-gradient-to-b from-dr-blue/25 via-slate-200 to-transparent" />
               </div>
-              <div className="space-y-6">
-                {filteredNotifications.map((notification) => {
+              <div className="space-y-8">
+                {/* Notificaciones de Hoy */}
+                {groupedNotifications.today.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-dr-blue">Hoy</h3>
+                      <div className="flex-1 h-px bg-gradient-to-r from-dr-blue/30 to-transparent" />
+                      <Badge className="bg-dr-blue/10 text-dr-blue font-semibold">{groupedNotifications.today.length}</Badge>
+                    </div>
+                    <div className="space-y-6">
+                      {groupedNotifications.today.map((notification) => {
                   const typeConfig = getTypeConfig(notification.type);
                   const isUnread = !notification.read;
                   const normalizedType =
@@ -4469,6 +4633,432 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                     </div>
                   );
                 })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notificaciones de Ayer */}
+                {groupedNotifications.yesterday.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">Ayer</h3>
+                      <div className="flex-1 h-px bg-gradient-to-r from-slate-300 to-transparent" />
+                      <Badge className="bg-slate-100 text-slate-600 font-semibold">{groupedNotifications.yesterday.length}</Badge>
+                    </div>
+                    <div className="space-y-6">
+                      {groupedNotifications.yesterday.map((notification) => {
+                  const typeConfig = getTypeConfig(notification.type);
+                  const isUnread = !notification.read;
+                  const normalizedType =
+                    notification.type
+                      ?.toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/_/g, '-') ?? 'general';
+                  const isUnassignedAlert = normalizedType === 'request-unassigned';
+                  const notificationId = notification.id ?? 'sin-id';
+                  const contentLayoutClass = isUnassignedAlert
+                    ? 'flex w-full flex-col items-center gap-4 text-center'
+                    : 'flex flex-col gap-4 md:flex-row md:items-start md:justify-between';
+                  const metaWrapperClass = isUnassignedAlert
+                    ? 'flex flex-col gap-3 items-center text-center'
+                    : 'flex flex-col gap-3 text-left md:text-right';
+                  const badgeRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-2'
+                    : 'flex flex-wrap items-center gap-2';
+                  const statusRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap gap-2 justify-center'
+                    : 'flex flex-wrap gap-2 md:justify-end';
+                  const footerWrapperClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500'
+                    : 'flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500';
+                  const footerIdClass = isUnassignedAlert
+                    ? 'inline-flex items-center gap-2 justify-center'
+                    : 'inline-flex items-center gap-2';
+                  return (
+                    <div key={notification.id} className="relative md:pl-14">
+                      <span
+                        className={`absolute left-5 top-6 hidden h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-white shadow-md md:flex ${
+                          isUnread ? 'bg-dr-blue' : 'bg-slate-300'
+                        }`}
+                      />
+                      <div
+                        className={`group relative overflow-hidden rounded-2xl border bg-white/95 p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+                          isUnread
+                            ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
+                            : 'border-slate-100 hover:shadow-md'
+                        }`}
+                      >
+                        <span
+                          className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
+                            isUnread
+                              ? 'from-dr-blue via-sky-400 to-transparent'
+                              : 'from-slate-200 via-slate-50 to-transparent'
+                          }`}
+                        />
+                        <div className="flex flex-col gap-4">
+                          <div className={contentLayoutClass}>
+                            <div className={`space-y-3 ${isUnassignedAlert ? 'w-full max-w-2xl' : ''}`}>
+                              <div className={`${badgeRowClass} text-xs font-semibold`}>
+                                <span
+                                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${typeConfig.badgeClass}`}
+                                >
+                                  {typeConfig.icon}
+                                  {typeConfig.label}
+                                </span>
+                                {isUnread && (
+                                  <span className="inline-flex items-center rounded-full bg-dr-blue/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-dr-blue">
+                                    Nuevo
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`space-y-2 ${isUnassignedAlert ? 'text-center' : ''}`}>
+                                <h3 className="text-lg font-semibold text-dr-dark-gray">
+                                  {notification.title}
+                                </h3>
+                                <p className="text-sm leading-relaxed text-slate-600">
+                                  {notification.message}
+                                </p>
+                              </div>
+                              {isUnassignedAlert && (
+                                <div className="mx-auto flex w-full flex-col items-center gap-3 rounded-2xl border border-dr-blue/20 bg-gradient-to-br from-dr-blue/5 via-white to-white p-4 text-center shadow-inner">
+                                  <div className="inline-flex items-center gap-2 rounded-full bg-dr-blue/10 px-4 py-1 text-sm font-semibold text-dr-blue">
+                                    <UserMinus className="h-4 w-4" />
+                                    Acción requerida
+                                  </div>
+                                  <p className="text-sm text-slate-600">
+                                    Asigna un analista disponible para dar seguimiento a esta solicitud pendiente.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div className={metaWrapperClass}>
+                              <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+                                <Clock className="h-3.5 w-3.5" />
+                                {formatDate(notification.createdAt)}
+                              </span>
+                              <div className={statusRowClass}>
+                                {getPriorityBadge(notification.priority)}
+                                <Badge
+                                  className={`text-xs font-semibold ${
+                                    notification.read
+                                      ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                      : 'border-dr-blue/30 bg-dr-blue/10 text-dr-blue'
+                                  }`}
+                                >
+                                  {notification.read ? 'Leída' : 'Sin leer'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className={footerWrapperClass}>
+                            <span className={footerIdClass}>
+                              <Shield className="h-3.5 w-3.5 text-slate-400" />
+                              ID #{notificationId}
+                            </span>
+                            {isUnread && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => markAsRead(notification.id)}
+                                className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
+                                title="Marcar como leída"
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                Marcar como leída
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notificaciones de Esta Semana */}
+                {groupedNotifications.thisWeek.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Esta Semana</h3>
+                      <div className="flex-1 h-px bg-gradient-to-r from-slate-300 to-transparent" />
+                      <Badge className="bg-slate-100 text-slate-500 font-semibold">{groupedNotifications.thisWeek.length}</Badge>
+                    </div>
+                    <div className="space-y-6">
+                      {groupedNotifications.thisWeek.map((notification) => {
+                  const typeConfig = getTypeConfig(notification.type);
+                  const isUnread = !notification.read;
+                  const normalizedType =
+                    notification.type
+                      ?.toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/_/g, '-') ?? 'general';
+                  const isUnassignedAlert = normalizedType === 'request-unassigned';
+                  const notificationId = notification.id ?? 'sin-id';
+                  const contentLayoutClass = isUnassignedAlert
+                    ? 'flex w-full flex-col items-center gap-4 text-center'
+                    : 'flex flex-col gap-4 md:flex-row md:items-start md:justify-between';
+                  const metaWrapperClass = isUnassignedAlert
+                    ? 'flex flex-col gap-3 items-center text-center'
+                    : 'flex flex-col gap-3 text-left md:text-right';
+                  const badgeRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-2'
+                    : 'flex flex-wrap items-center gap-2';
+                  const statusRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap gap-2 justify-center'
+                    : 'flex flex-wrap gap-2 md:justify-end';
+                  const footerWrapperClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500'
+                    : 'flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500';
+                  const footerIdClass = isUnassignedAlert
+                    ? 'inline-flex items-center gap-2 justify-center'
+                    : 'inline-flex items-center gap-2';
+                  return (
+                    <div key={notification.id} className="relative md:pl-14">
+                      <span
+                        className={`absolute left-5 top-6 hidden h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-white shadow-md md:flex ${
+                          isUnread ? 'bg-dr-blue' : 'bg-slate-300'
+                        }`}
+                      />
+                      <div
+                        className={`group relative overflow-hidden rounded-2xl border bg-white/95 p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+                          isUnread
+                            ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
+                            : 'border-slate-100 hover:shadow-md'
+                        }`}
+                      >
+                        <span
+                          className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
+                            isUnread
+                              ? 'from-dr-blue via-sky-400 to-transparent'
+                              : 'from-slate-200 via-slate-50 to-transparent'
+                          }`}
+                        />
+                        <div className="flex flex-col gap-4">
+                          <div className={contentLayoutClass}>
+                            <div className={`space-y-3 ${isUnassignedAlert ? 'w-full max-w-2xl' : ''}`}>
+                              <div className={`${badgeRowClass} text-xs font-semibold`}>
+                                <span
+                                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${typeConfig.badgeClass}`}
+                                >
+                                  {typeConfig.icon}
+                                  {typeConfig.label}
+                                </span>
+                                {isUnread && (
+                                  <span className="inline-flex items-center rounded-full bg-dr-blue/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-dr-blue">
+                                    Nuevo
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`space-y-2 ${isUnassignedAlert ? 'text-center' : ''}`}>
+                                <h3 className="text-lg font-semibold text-dr-dark-gray">
+                                  {notification.title}
+                                </h3>
+                                <p className="text-sm leading-relaxed text-slate-600">
+                                  {notification.message}
+                                </p>
+                              </div>
+                              {isUnassignedAlert && (
+                                <div className="mx-auto flex w-full flex-col items-center gap-3 rounded-2xl border border-dr-blue/20 bg-gradient-to-br from-dr-blue/5 via-white to-white p-4 text-center shadow-inner">
+                                  <div className="inline-flex items-center gap-2 rounded-full bg-dr-blue/10 px-4 py-1 text-sm font-semibold text-dr-blue">
+                                    <UserMinus className="h-4 w-4" />
+                                    Acción requerida
+                                  </div>
+                                  <p className="text-sm text-slate-600">
+                                    Asigna un analista disponible para dar seguimiento a esta solicitud pendiente.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div className={metaWrapperClass}>
+                              <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+                                <Clock className="h-3.5 w-3.5" />
+                                {formatDate(notification.createdAt)}
+                              </span>
+                              <div className={statusRowClass}>
+                                {getPriorityBadge(notification.priority)}
+                                <Badge
+                                  className={`text-xs font-semibold ${
+                                    notification.read
+                                      ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                      : 'border-dr-blue/30 bg-dr-blue/10 text-dr-blue'
+                                  }`}
+                                >
+                                  {notification.read ? 'Leída' : 'Sin leer'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className={footerWrapperClass}>
+                            <span className={footerIdClass}>
+                              <Shield className="h-3.5 w-3.5 text-slate-400" />
+                              ID #{notificationId}
+                            </span>
+                            {isUnread && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => markAsRead(notification.id)}
+                                className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
+                                title="Marcar como leída"
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                Marcar como leída
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notificaciones Antiguas */}
+                {groupedNotifications.older.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-400">Más Antiguas</h3>
+                      <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" />
+                      <Badge className="bg-slate-50 text-slate-400 font-semibold">{groupedNotifications.older.length}</Badge>
+                    </div>
+                    <div className="space-y-6">
+                      {groupedNotifications.older.map((notification) => {
+                  const typeConfig = getTypeConfig(notification.type);
+                  const isUnread = !notification.read;
+                  const normalizedType =
+                    notification.type
+                      ?.toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/_/g, '-') ?? 'general';
+                  const isUnassignedAlert = normalizedType === 'request-unassigned';
+                  const notificationId = notification.id ?? 'sin-id';
+                  const contentLayoutClass = isUnassignedAlert
+                    ? 'flex w-full flex-col items-center gap-4 text-center'
+                    : 'flex flex-col gap-4 md:flex-row md:items-start md:justify-between';
+                  const metaWrapperClass = isUnassignedAlert
+                    ? 'flex flex-col gap-3 items-center text-center'
+                    : 'flex flex-col gap-3 text-left md:text-right';
+                  const badgeRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-2'
+                    : 'flex flex-wrap items-center gap-2';
+                  const statusRowClass = isUnassignedAlert
+                    ? 'flex flex-wrap gap-2 justify-center'
+                    : 'flex flex-wrap gap-2 md:justify-end';
+                  const footerWrapperClass = isUnassignedAlert
+                    ? 'flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500'
+                    : 'flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-500';
+                  const footerIdClass = isUnassignedAlert
+                    ? 'inline-flex items-center gap-2 justify-center'
+                    : 'inline-flex items-center gap-2';
+                  return (
+                    <div key={notification.id} className="relative md:pl-14">
+                      <span
+                        className={`absolute left-5 top-6 hidden h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-white shadow-md md:flex ${
+                          isUnread ? 'bg-dr-blue' : 'bg-slate-300'
+                        }`}
+                      />
+                      <div
+                        className={`group relative overflow-hidden rounded-2xl border bg-white/95 p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+                          isUnread
+                            ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
+                            : 'border-slate-100 hover:shadow-md'
+                        }`}
+                      >
+                        <span
+                          className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
+                            isUnread
+                              ? 'from-dr-blue via-sky-400 to-transparent'
+                              : 'from-slate-200 via-slate-50 to-transparent'
+                          }`}
+                        />
+                        <div className="flex flex-col gap-4">
+                          <div className={contentLayoutClass}>
+                            <div className={`space-y-3 ${isUnassignedAlert ? 'w-full max-w-2xl' : ''}`}>
+                              <div className={`${badgeRowClass} text-xs font-semibold`}>
+                                <span
+                                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${typeConfig.badgeClass}`}
+                                >
+                                  {typeConfig.icon}
+                                  {typeConfig.label}
+                                </span>
+                                {isUnread && (
+                                  <span className="inline-flex items-center rounded-full bg-dr-blue/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-dr-blue">
+                                    Nuevo
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`space-y-2 ${isUnassignedAlert ? 'text-center' : ''}`}>
+                                <h3 className="text-lg font-semibold text-dr-dark-gray">
+                                  {notification.title}
+                                </h3>
+                                <p className="text-sm leading-relaxed text-slate-600">
+                                  {notification.message}
+                                </p>
+                              </div>
+                              {isUnassignedAlert && (
+                                <div className="mx-auto flex w-full flex-col items-center gap-3 rounded-2xl border border-dr-blue/20 bg-gradient-to-br from-dr-blue/5 via-white to-white p-4 text-center shadow-inner">
+                                  <div className="inline-flex items-center gap-2 rounded-full bg-dr-blue/10 px-4 py-1 text-sm font-semibold text-dr-blue">
+                                    <UserMinus className="h-4 w-4" />
+                                    Acción requerida
+                                  </div>
+                                  <p className="text-sm text-slate-600">
+                                    Asigna un analista disponible para dar seguimiento a esta solicitud pendiente.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div className={metaWrapperClass}>
+                              <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+                                <Clock className="h-3.5 w-3.5" />
+                                {formatDate(notification.createdAt)}
+                              </span>
+                              <div className={statusRowClass}>
+                                {getPriorityBadge(notification.priority)}
+                                <Badge
+                                  className={`text-xs font-semibold ${
+                                    notification.read
+                                      ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                      : 'border-dr-blue/30 bg-dr-blue/10 text-dr-blue'
+                                  }`}
+                                >
+                                  {notification.read ? 'Leída' : 'Sin leer'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className={footerWrapperClass}>
+                            <span className={footerIdClass}>
+                              <Shield className="h-3.5 w-3.5 text-slate-400" />
+                              ID #{notificationId}
+                            </span>
+                            {isUnread && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => markAsRead(notification.id)}
+                                className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
+                                title="Marcar como leída"
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                Marcar como leída
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
