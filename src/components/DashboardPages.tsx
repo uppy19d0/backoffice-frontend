@@ -4482,7 +4482,10 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
+  const [padronFilter, setPadronFilter] = useState<'all' | 'in' | 'out'>('all');
+  const [contactFilter, setContactFilter] = useState<'all' | 'complete' | 'email' | 'phone' | 'none'>('all');
+  const [showFilters, setShowFilters] = useState(false);
 
   const [beneficiaries, setBeneficiaries] = useState<BeneficiaryDto[]>([]);
   const [pagination, setPagination] = useState({
@@ -4745,8 +4748,37 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
     if (!canViewAllBeneficiaries) {
       return [];
     }
-    return beneficiaries;
-  }, [beneficiaries, canViewAllBeneficiaries]);
+
+    let filtered = [...beneficiaries];
+
+    // Filtro por padrón
+    if (padronFilter === 'in') {
+      filtered = filtered.filter((b) => b.padronData?.found === true);
+    } else if (padronFilter === 'out') {
+      filtered = filtered.filter((b) => !b.padronData?.found);
+    }
+
+    // Filtro por contacto
+    if (contactFilter === 'complete') {
+      filtered = filtered.filter(
+        (b) =>
+          (typeof b.email === 'string' && b.email.trim()) &&
+          (typeof b.phoneNumber === 'string' && b.phoneNumber.trim())
+      );
+    } else if (contactFilter === 'email') {
+      filtered = filtered.filter((b) => typeof b.email === 'string' && b.email.trim());
+    } else if (contactFilter === 'phone') {
+      filtered = filtered.filter((b) => typeof b.phoneNumber === 'string' && b.phoneNumber.trim());
+    } else if (contactFilter === 'none') {
+      filtered = filtered.filter(
+        (b) =>
+          (!b.email || !b.email.trim()) &&
+          (!b.phoneNumber || !b.phoneNumber.trim())
+      );
+    }
+
+    return filtered;
+  }, [beneficiaries, canViewAllBeneficiaries, padronFilter, contactFilter]);
 
   const effectivePagination = pagination;
   const totalCount = effectivePagination.totalCount;
@@ -4755,6 +4787,14 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
   ).length;
   const withPhone = displayedBeneficiaries.filter(
     (beneficiary) => typeof beneficiary.phoneNumber === 'string' && beneficiary.phoneNumber.trim(),
+  ).length;
+  const inPadron = displayedBeneficiaries.filter(
+    (beneficiary) => beneficiary.padronData?.found === true,
+  ).length;
+  const withCompleteContact = displayedBeneficiaries.filter(
+    (beneficiary) =>
+      (typeof beneficiary.email === 'string' && beneficiary.email.trim()) &&
+      (typeof beneficiary.phoneNumber === 'string' && beneficiary.phoneNumber.trim()),
   ).length;
 
   const lastUpdatedText = lastUpdated
@@ -4808,21 +4848,76 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
       const email =
         typeof beneficiary.email === 'string' && beneficiary.email.trim().length > 0
           ? beneficiary.email.trim()
-          : '—';
+          : null;
       const phone =
         typeof beneficiary.phoneNumber === 'string' && beneficiary.phoneNumber.trim().length > 0
           ? beneficiary.phoneNumber.trim()
-          : '—';
+          : null;
+      const inPadron = beneficiary.padronData?.found === true;
+      const hasCompleteContact = email && phone;
 
       return (
-        <TableRow key={`${idValue}-${nationalId}`}>
-          <TableCell className="text-sm text-dr-dark-gray font-medium">
-            {buildBeneficiaryName(beneficiary)}
+        <TableRow key={`${idValue}-${nationalId}`} className="hover:bg-gray-50/50 transition-colors">
+          <TableCell>
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-dr-blue to-dr-blue-light flex items-center justify-center flex-shrink-0">
+                <User className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-dr-dark-gray">
+                  {buildBeneficiaryName(beneficiary)}
+                </p>
+                <p className="text-xs text-gray-500 sm:hidden">{nationalId}</p>
+              </div>
+            </div>
           </TableCell>
-          <TableCell className="text-sm text-gray-700">{nationalId}</TableCell>
-          <TableCell className="text-sm text-gray-700">{email}</TableCell>
-          <TableCell className="text-sm text-gray-700">{phone}</TableCell>
-          <TableCell className="text-sm text-gray-700">
+          <TableCell className="hidden sm:table-cell">
+            <span className="text-sm font-mono text-gray-700 bg-gray-100 px-2 py-1 rounded">
+              {nationalId}
+            </span>
+          </TableCell>
+          <TableCell>
+            {inPadron ? (
+              <Badge className="bg-green-100 text-green-800 border-green-200 font-medium">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                En Padrón
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-gray-600 border-gray-300 font-medium">
+                <XCircle className="h-3 w-3 mr-1" />
+                No Encontrado
+              </Badge>
+            )}
+          </TableCell>
+          <TableCell>
+            <div className="flex flex-col gap-1">
+              {email ? (
+                <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <Mail className="h-3 w-3 text-blue-600 flex-shrink-0" />
+                  <span className="truncate max-w-[150px]" title={email}>{email}</span>
+                </div>
+              ) : null}
+              {phone ? (
+                <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <Phone className="h-3 w-3 text-green-600 flex-shrink-0" />
+                  <span>{phone}</span>
+                </div>
+              ) : null}
+              {!email && !phone ? (
+                <Badge variant="outline" className="text-amber-700 border-amber-300 text-xs w-fit">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Sin contacto
+                </Badge>
+              ) : null}
+              {hasCompleteContact ? (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs w-fit">
+                  <CheckCheck className="h-3 w-3 mr-1" />
+                  Completo
+                </Badge>
+              ) : null}
+            </div>
+          </TableCell>
+          <TableCell className="text-xs text-gray-600">
             {formatBeneficiaryDate(
               typeof beneficiary.createdAt === 'string' ? beneficiary.createdAt : undefined,
             )}
@@ -4834,6 +4929,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                 size="sm"
                 onClick={() => handleViewBeneficiary(beneficiary)}
                 className="text-dr-blue hover:bg-blue-50"
+                title="Ver detalles"
               >
                 <Eye className="h-4 w-4" />
               </Button>
@@ -4863,38 +4959,38 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-dr-blue bg-gradient-to-br from-blue-50/50 to-white">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-blue-50 p-2 rounded-full">
-                <Users className="h-5 w-5 text-dr-blue" />
+              <div className="bg-dr-blue/10 p-3 rounded-xl">
+                <Users className="h-6 w-6 text-dr-blue" />
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Total registrados</p>
-                <p className="text-xl font-bold text-dr-dark-gray">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Total Registrados</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">
                   {totalCount.toLocaleString('es-DO')}
                 </p>
-                <p className="text-xs text-gray-500">
-                  Registros visibles: {displayedBeneficiaries.length.toLocaleString('es-DO')}
+                <p className="text-xs text-gray-500 mt-1">
+                  En página: {displayedBeneficiaries.length}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-green-50/50 to-white">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-green-50 p-2 rounded-full">
-                <Mail className="h-5 w-5 text-green-600" />
+              <div className="bg-green-500/10 p-3 rounded-xl">
+                <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Con correo (página)</p>
-                <p className="text-xl font-bold text-dr-dark-gray">{withEmail}</p>
-                <p className="text-xs text-gray-500">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">En Padrón</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">{inPadron}</p>
+                <p className="text-xs text-gray-500 mt-1">
                   {displayedBeneficiaries.length > 0
-                    ? `${((withEmail / displayedBeneficiaries.length) * 100).toFixed(1)}%`
+                    ? `${((inPadron / displayedBeneficiaries.length) * 100).toFixed(1)}% de la página`
                     : '—'}
                 </p>
               </div>
@@ -4902,18 +4998,18 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50/50 to-white">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-amber-50 p-2 rounded-full">
-                <Phone className="h-5 w-5 text-amber-600" />
+              <div className="bg-purple-500/10 p-3 rounded-xl">
+                <Mail className="h-6 w-6 text-purple-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Con teléfono (página)</p>
-                <p className="text-xl font-bold text-dr-dark-gray">{withPhone}</p>
-                <p className="text-xs text-gray-500">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Con Contacto Completo</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">{withCompleteContact}</p>
+                <p className="text-xs text-gray-500 mt-1">
                   {displayedBeneficiaries.length > 0
-                    ? `${((withPhone / displayedBeneficiaries.length) * 100).toFixed(1)}%`
+                    ? `${((withCompleteContact / displayedBeneficiaries.length) * 100).toFixed(1)}% tiene email y teléfono`
                     : '—'}
                 </p>
               </div>
@@ -4921,17 +5017,21 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50/50 to-white">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-purple-50 p-2 rounded-full">
-                <Calendar className="h-5 w-5 text-purple-600" />
+              <div className="bg-amber-500/10 p-3 rounded-xl">
+                <Clock className="h-6 w-6 text-amber-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Datos actualizados</p>
-                <p className="text-xl font-bold text-dr-dark-gray">{lastUpdatedText}</p>
-                <p className="text-xs text-gray-500">
-                  Página {currentPage} de {effectivePagination.totalPages}
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Última Actualización</p>
+                <p className="text-sm font-bold text-dr-dark-gray mt-0.5 leading-tight">
+                  {lastUpdated
+                    ? lastUpdated.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Pág. {currentPage} de {effectivePagination.totalPages}
                 </p>
               </div>
             </div>
@@ -4941,52 +5041,160 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
 
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center lg:flex-1">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Buscar por nombre, cédula o identificador..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  className="pl-10"
-                />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center lg:flex-1">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar por nombre, cédula o identificador..."
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <div className="sm:w-[210px]">
+                  <Label htmlFor="beneficiaries-page-size" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Registros por página
+                  </Label>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(value) => {
+                      const parsed = Number.parseInt(value, 10);
+                      if (!Number.isNaN(parsed)) {
+                        setPageSize(parsed);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="beneficiaries-page-size" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 25, 50, 100].map((size) => (
+                        <SelectItem key={size} value={String(size)}>
+                          {size} por página
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="sm:w-[210px]">
-                <Label htmlFor="beneficiaries-page-size" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Registros por página
-                </Label>
-                <Select
-                  value={String(pageSize)}
-                  onValueChange={(value) => {
-                    const parsed = Number.parseInt(value, 10);
-                    if (!Number.isNaN(parsed)) {
-                      setPageSize(parsed);
-                    }
-                  }}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`gap-2 ${showFilters ? 'bg-blue-50 border-blue-300 text-dr-blue' : ''}`}
                 >
-                  <SelectTrigger id="beneficiaries-page-size" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[10, 25, 50, 100].map((size) => (
-                      <SelectItem key={size} value={String(size)}>
-                        {size} por página
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Filter className="h-4 w-4" />
+                  Filtros
+                  {(padronFilter !== 'all' || contactFilter !== 'all') && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 bg-dr-blue text-white">
+                      {[padronFilter !== 'all' ? 1 : 0, contactFilter !== 'all' ? 1 : 0].reduce((a, b) => a + b, 0)}
+                    </Badge>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void loadBeneficiaries(currentPage, debouncedSearch)}
+                  className="gap-2 bg-dr-blue hover:bg-dr-blue-dark text-white"
+                  disabled={isLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Actualizar
+                </Button>
               </div>
             </div>
-            <Button
-              type="button"
-              onClick={() => void loadBeneficiaries(currentPage, debouncedSearch)}
-              className="gap-2 bg-dr-blue hover:bg-dr-blue-dark text-white"
-              disabled={isLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Actualizar
-            </Button>
+
+            {showFilters && (
+              <div className="border-t pt-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Estado en Padrón
+                    </Label>
+                    <Select
+                      value={padronFilter}
+                      onValueChange={(value) => setPadronFilter(value as 'all' | 'in' | 'out')}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="in">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            En Padrón
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="out">
+                          <div className="flex items-center gap-2">
+                            <XCircle className="h-4 w-4 text-gray-400" />
+                            Fuera del Padrón
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Información de Contacto
+                    </Label>
+                    <Select
+                      value={contactFilter}
+                      onValueChange={(value) => setContactFilter(value as 'all' | 'complete' | 'email' | 'phone' | 'none')}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="complete">
+                          <div className="flex items-center gap-2">
+                            <CheckCheck className="h-4 w-4 text-green-600" />
+                            Contacto Completo
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="email">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-blue-600" />
+                            Solo Email
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="phone">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-purple-600" />
+                            Solo Teléfono
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="none">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4 text-amber-600" />
+                            Sin Contacto
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setPadronFilter('all');
+                        setContactFilter('all');
+                      }}
+                      className="w-full text-gray-600 hover:text-dr-blue"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Limpiar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -5010,12 +5218,12 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[200px]">Beneficiario</TableHead>
-                  <TableHead className="min-w-[160px]">Cédula</TableHead>
-                  <TableHead className="min-w-[200px]">Correo</TableHead>
-                  <TableHead className="min-w-[160px]">Teléfono</TableHead>
-                  <TableHead className="min-w-[140px]">Registro</TableHead>
-                  <TableHead className="min-w-[120px]">Acciones</TableHead>
+                  <TableHead className="min-w-[220px]">Beneficiario</TableHead>
+                  <TableHead className="min-w-[140px]">Cédula</TableHead>
+                  <TableHead className="min-w-[130px]">Estado Padrón</TableHead>
+                  <TableHead className="min-w-[180px]">Contacto</TableHead>
+                  <TableHead className="min-w-[120px]">Registro</TableHead>
+                  <TableHead className="min-w-[100px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>{renderTableBody()}</TableBody>
@@ -5052,18 +5260,40 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
 
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="border-b pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-dr-blue to-dr-blue-light flex items-center justify-center">
-                <User className="h-6 w-6 text-white" />
+          <DialogHeader className="border-b pb-4 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-dr-blue to-dr-blue-light flex items-center justify-center shadow-lg">
+                  <User className="h-7 w-7 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-2xl font-bold text-dr-dark-gray">
+                    {buildBeneficiaryName(selectedBeneficiary ?? {})}
+                  </DialogTitle>
+                  <DialogDescription className="text-sm mt-1 flex items-center gap-2">
+                    <IdCard className="h-3.5 w-3.5" />
+                    {selectedBeneficiary?.nationalId || 'No disponible'}
+                  </DialogDescription>
+                </div>
               </div>
-              <div>
-                <DialogTitle className="text-xl font-bold text-dr-dark-gray">
-                  {buildBeneficiaryName(selectedBeneficiary ?? {})}
-                </DialogTitle>
-                <DialogDescription className="text-sm">
-                  Cédula: {selectedBeneficiary?.nationalId || 'No disponible'}
-                </DialogDescription>
+              <div className="flex flex-col gap-2 items-end">
+                {selectedBeneficiary?.padronData?.found ? (
+                  <Badge className="bg-green-100 text-green-800 border-green-300 shadow-sm">
+                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                    Registrado en Padrón
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-gray-600 border-gray-400">
+                    <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
+                    No en Padrón
+                  </Badge>
+                )}
+                {selectedBeneficiary?.email && selectedBeneficiary?.phoneNumber && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 shadow-sm">
+                    <CheckCheck className="h-3.5 w-3.5 mr-1.5" />
+                    Contacto Completo
+                  </Badge>
+                )}
               </div>
             </div>
           </DialogHeader>
@@ -5091,67 +5321,35 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
 
                 {/* Tab: Información General */}
                 <TabsContent value="general" className="space-y-4 mt-0">
-                  <Card className="border-gray-200 shadow-sm">
-                    <CardHeader className="bg-gradient-to-r from-blue-50 to-white pb-3">
-                      <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
-                        <FileUser className="h-4 w-4 text-dr-blue" />
-                        Datos Personales
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600">Identificador del Sistema</p>
-                          <p className="text-sm text-dr-dark-gray break-all font-mono bg-gray-50 px-2 py-1 rounded">
-                            {typeof selectedBeneficiary.id === 'string'
-                              ? selectedBeneficiary.id
-                              : typeof selectedBeneficiary.id === 'number'
-                                ? String(selectedBeneficiary.id)
-                                : '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600">Nombre Completo</p>
-                          <p className="text-sm text-dr-dark-gray font-medium">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Card className="border-l-4 border-l-dr-blue shadow-md">
+                      <CardHeader className="bg-gradient-to-r from-blue-50 to-white pb-3">
+                        <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <FileUser className="h-5 w-5 text-dr-blue" />
+                          Datos Personales
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Nombre Completo</p>
+                          <p className="text-base text-dr-dark-gray font-bold">
                             {buildBeneficiaryName(selectedBeneficiary)}
                           </p>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600">Cédula de Identidad</p>
-                          <p className="text-sm text-dr-dark-gray font-mono bg-gray-50 px-2 py-1 rounded">
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">Cédula de Identidad</p>
+                          <p className="text-base text-dr-dark-gray font-mono bg-blue-50 px-3 py-2 rounded-lg border border-blue-200 font-bold">
                             {typeof selectedBeneficiary.nationalId === 'string' && selectedBeneficiary.nationalId.trim()
                               ? selectedBeneficiary.nationalId.trim()
                               : '—'}
                           </p>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            Correo Electrónico
-                          </p>
-                          <p className="text-sm text-dr-dark-gray">
-                            {typeof selectedBeneficiary.email === 'string' && selectedBeneficiary.email.trim()
-                              ? selectedBeneficiary.email.trim()
-                              : '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            Teléfono
-                          </p>
-                          <p className="text-sm text-dr-dark-gray font-mono">
-                            {typeof selectedBeneficiary.phoneNumber === 'string' && selectedBeneficiary.phoneNumber.trim()
-                              ? selectedBeneficiary.phoneNumber.trim()
-                              : '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600 flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
                             Fecha de Nacimiento
                           </p>
-                          <p className="text-sm text-dr-dark-gray">
+                          <p className="text-base text-dr-dark-gray font-semibold">
                             {formatBeneficiaryDate(
                               typeof selectedBeneficiary.dateOfBirth === 'string'
                                 ? selectedBeneficiary.dateOfBirth
@@ -5159,9 +5357,92 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                             )}
                           </p>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide">ID del Sistema</p>
+                          <p className="text-xs text-gray-600 break-all font-mono bg-gray-50 px-2 py-1.5 rounded border">
+                            {typeof selectedBeneficiary.id === 'string'
+                              ? selectedBeneficiary.id
+                              : typeof selectedBeneficiary.id === 'number'
+                                ? String(selectedBeneficiary.id)
+                                : '—'}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-purple-500 shadow-md">
+                      <CardHeader className="bg-gradient-to-r from-purple-50 to-white pb-3">
+                        <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <Mail className="h-5 w-5 text-purple-600" />
+                          Información de Contacto
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide flex items-center gap-1.5">
+                            <Mail className="h-3.5 w-3.5 text-blue-600" />
+                            Correo Electrónico
+                          </p>
+                          {typeof selectedBeneficiary.email === 'string' && selectedBeneficiary.email.trim() ? (
+                            <div className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <p className="text-base text-dr-dark-gray font-medium break-all">
+                                {selectedBeneficiary.email.trim()}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                              <XCircle className="h-4 w-4 text-gray-400" />
+                              <p className="text-sm text-gray-500 italic">No registrado</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold uppercase text-gray-500 tracking-wide flex items-center gap-1.5">
+                            <Phone className="h-3.5 w-3.5 text-green-600" />
+                            Teléfono
+                          </p>
+                          {typeof selectedBeneficiary.phoneNumber === 'string' && selectedBeneficiary.phoneNumber.trim() ? (
+                            <div className="flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+                              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <p className="text-base text-dr-dark-gray font-mono font-medium">
+                                {selectedBeneficiary.phoneNumber.trim()}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                              <XCircle className="h-4 w-4 text-gray-400" />
+                              <p className="text-sm text-gray-500 italic">No registrado</p>
+                            </div>
+                          )}
+                        </div>
+                        {selectedBeneficiary.email && selectedBeneficiary.phoneNumber && (
+                          <Alert className="border-green-200 bg-green-50">
+                            <CheckCheck className="h-4 w-4 text-green-600" />
+                            <AlertDescription className="text-green-800 text-sm font-medium">
+                              Este beneficiario tiene información de contacto completa
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {selectedBeneficiary.notes && (
+                    <Card className="border-l-4 border-l-amber-500 shadow-md">
+                      <CardHeader className="bg-gradient-to-r from-amber-50 to-white pb-3">
+                        <CardTitle className="text-base font-semibold text-dr-dark-gray flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-amber-600" />
+                          Notas Adicionales
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="text-sm text-gray-800 bg-amber-50/50 p-4 rounded-lg border border-amber-200 leading-relaxed whitespace-pre-wrap">
+                          {selectedBeneficiary.notes}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <Card className="border-gray-200 shadow-sm">
                     <CardHeader className="bg-gradient-to-r from-purple-50 to-white pb-3">
