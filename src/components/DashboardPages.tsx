@@ -1688,6 +1688,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   <SelectItem value="name-change">Cambio de Nombre</SelectItem>
                   <SelectItem value="id-change">Actualización de Cédula</SelectItem>
                   <SelectItem value="SOCIAL-AID">Ayuda Social</SelectItem>
+                  <SelectItem value="other">Otros</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2626,6 +2627,145 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
               {/* Tab: Solicitud */}
               <TabsContent value="solicitud" className="flex-1 overflow-y-auto px-6 py-6 space-y-5 m-0 focus-visible:outline-none focus-visible:ring-0">
+                  {/* Indicador de Proceso */}
+                  <Card className="border-dr-blue/30 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-blue-50/50 to-white">
+                    <CardHeader className="bg-gradient-to-r from-dr-blue/10 to-white pb-4">
+                      <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
+                        <ArrowRight className="h-5 w-5 text-dr-blue" />
+                        Progreso de la Solicitud
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                      {(() => {
+                        const currentStatus = normalizeStatus(selectedRequest.status);
+                        const steps = [
+                          { key: 'pendiente', label: 'Recibida', icon: Clock, color: 'text-amber-600', bgColor: 'bg-amber-100', borderColor: 'border-amber-300' },
+                          { key: 'asignada', label: 'Asignada', icon: UserCheck, color: 'text-blue-600', bgColor: 'bg-blue-100', borderColor: 'border-blue-300' },
+                          { key: 'en revisión', label: 'En Revisión', icon: Eye, color: 'text-indigo-600', bgColor: 'bg-indigo-100', borderColor: 'border-indigo-300' },
+                          { key: 'aprobada', label: 'Aprobada', icon: CheckCircle, color: 'text-green-600', bgColor: 'bg-green-100', borderColor: 'border-green-300' },
+                          { key: 'completada', label: 'Completada', icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-100', borderColor: 'border-emerald-300' },
+                        ];
+
+                        // Determinar el índice del paso actual
+                        const currentStepIndex = steps.findIndex(step => step.key === currentStatus);
+                        const isRejected = currentStatus === 'rechazada';
+                        const isCancelled = currentStatus === 'cancelada';
+
+                        return (
+                          <div className="space-y-6">
+                            {/* Stepper horizontal para desktop */}
+                            <div className="hidden md:flex items-center justify-between relative">
+                              {steps.map((step, index) => {
+                                const StepIcon = step.icon;
+                                const isCompleted = index < currentStepIndex;
+                                const isCurrent = index === currentStepIndex;
+                                const isUpcoming = index > currentStepIndex;
+
+                                return (
+                                  <React.Fragment key={step.key}>
+                                    <div className="flex flex-col items-center gap-2 relative z-10">
+                                      <div
+                                        className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${
+                                          isCompleted
+                                            ? `${step.bgColor} ${step.borderColor} ${step.color}`
+                                            : isCurrent
+                                            ? `${step.bgColor} ${step.borderColor} ${step.color} ring-4 ring-${step.color.split('-')[1]}-100 shadow-lg`
+                                            : 'bg-gray-100 border-gray-300 text-gray-400'
+                                        }`}
+                                      >
+                                        {isCompleted ? (
+                                          <Check className="h-6 w-6" />
+                                        ) : (
+                                          <StepIcon className="h-6 w-6" />
+                                        )}
+                                      </div>
+                                      <div className="text-center">
+                                        <p
+                                          className={`text-xs font-semibold ${
+                                            isCompleted || isCurrent ? 'text-dr-dark-gray' : 'text-gray-400'
+                                          }`}
+                                        >
+                                          {step.label}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {index < steps.length - 1 && (
+                                      <div
+                                        className={`flex-1 h-0.5 mx-2 transition-all ${
+                                          index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
+                                        }`}
+                                      />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+
+                            {/* Stepper vertical para móvil */}
+                            <div className="md:hidden space-y-4">
+                              {steps.map((step, index) => {
+                                const StepIcon = step.icon;
+                                const isCompleted = index < currentStepIndex;
+                                const isCurrent = index === currentStepIndex;
+                                const isUpcoming = index > currentStepIndex;
+
+                                return (
+                                  <div key={step.key} className="flex items-start gap-3">
+                                    <div className="flex flex-col items-center">
+                                      <div
+                                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                          isCompleted
+                                            ? `${step.bgColor} ${step.borderColor} ${step.color}`
+                                            : isCurrent
+                                            ? `${step.bgColor} ${step.borderColor} ${step.color} ring-4 ring-${step.color.split('-')[1]}-100`
+                                            : 'bg-gray-100 border-gray-300 text-gray-400'
+                                        }`}
+                                      >
+                                        {isCompleted ? (
+                                          <Check className="h-5 w-5" />
+                                        ) : (
+                                          <StepIcon className="h-5 w-5" />
+                                        )}
+                                      </div>
+                                      {index < steps.length - 1 && (
+                                        <div
+                                          className={`w-0.5 h-8 my-1 transition-all ${
+                                            index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
+                                          }`}
+                                        />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 pt-2">
+                                      <p
+                                        className={`text-sm font-semibold ${
+                                          isCompleted || isCurrent ? 'text-dr-dark-gray' : 'text-gray-400'
+                                        }`}
+                                      >
+                                        {step.label}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Estados especiales: Rechazada o Cancelada */}
+                            {(isRejected || isCancelled) && (
+                              <div className={`mt-4 p-4 rounded-lg border-2 ${isRejected ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-300'}`}>
+                                <div className="flex items-center gap-2">
+                                  <XCircle className={`h-5 w-5 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
+                                  <p className={`font-semibold ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
+                                    Solicitud {isRejected ? 'Rechazada' : 'Cancelada'}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+
                   {/* Información de la Solicitud */}
                   <Card className="border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                     <CardHeader className="bg-gradient-to-r from-blue-50 to-white pb-4">
