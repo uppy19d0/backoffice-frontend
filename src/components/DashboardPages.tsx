@@ -2975,7 +2975,11 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => window.open(docUrl, '_blank')}
+                                      onClick={() => {
+                                        const baseUrl = 'http://168.231.72.57:9081';
+                                        const fullUrl = docUrl.startsWith('http') ? docUrl : `${baseUrl}${docUrl}`;
+                                        window.open(fullUrl, '_blank');
+                                      }}
                                       className="h-9 px-3 border-dr-blue text-dr-blue hover:bg-dr-blue hover:text-white transition-all"
                                     >
                                       <Eye className="h-4 w-4 mr-1.5" />
@@ -2987,8 +2991,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
+                                        const baseUrl = 'http://168.231.72.57:9081';
+                                        const fullUrl = docUrl.startsWith('http') ? docUrl : `${baseUrl}${docUrl}`;
                                         const link = document.createElement('a');
-                                        link.href = docUrl;
+                                        link.href = fullUrl;
                                         link.download = docName;
                                         link.target = '_blank';
                                         document.body.appendChild(link);
@@ -3064,12 +3070,12 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     </Card>
                   )}
 
-                  {/* Alerta cuando no hay información del padrón */}
+                  {/* Alerta cuando no hay información del siuben */}
                   {selectedRequest.beneficiary && (!selectedRequest.beneficiary.padronData || !selectedRequest.beneficiary.padronData.found) && (
                     <Alert className="border-amber-200 bg-amber-50/80">
                       <AlertCircle className="h-5 w-5 text-amber-600" />
                       <AlertDescription className="text-amber-800 font-medium ml-2">
-                        <span className="font-bold">Información del Padrón no disponible.</span> Este beneficiario no tiene datos asociados en el padrón nacional.
+                        <span className="font-bold">Información del Siuben no disponible.</span> Este beneficiario no tiene datos asociados en el siuben nacional.
                       </AlertDescription>
                     </Alert>
                   )}
@@ -3210,7 +3216,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       <CardContent className="pt-12 pb-12 text-center">
                         <Home className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                         <p className="text-lg text-gray-500 font-medium">No hay información del jefe de hogar disponible</p>
-                        <p className="text-sm text-gray-400 mt-2">No se encontraron datos del padrón para este beneficiario</p>
+                        <p className="text-sm text-gray-400 mt-2">No se encontraron datos del siuben para este beneficiario</p>
                       </CardContent>
                     </Card>
                   )}
@@ -5406,7 +5412,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
 
     let filtered = [...beneficiaries];
 
-    // Filtro por padrón
+    // Filtro por siuben
     if (padronFilter === 'in') {
       filtered = filtered.filter((b) => b.padronData?.found === true);
     } else if (padronFilter === 'out') {
@@ -5535,7 +5541,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
             {inPadron ? (
               <Badge className="bg-green-100 text-green-800 border-green-200 font-medium">
                 <CheckCircle className="h-3 w-3 mr-1" />
-                En Padrón
+                En Siuben
               </Badge>
             ) : (
               <Badge variant="outline" className="text-gray-600 border-gray-300 font-medium">
@@ -5641,7 +5647,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                 <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">En Padrón</p>
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">En Siuben</p>
                 <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">{inPadron}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {displayedBeneficiaries.length > 0
@@ -5766,7 +5772,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold uppercase tracking-wide text-gray-600">
-                      Estado en Padrón
+                      Estado en Siuben
                     </Label>
                     <Select
                       value={padronFilter}
@@ -5780,13 +5786,13 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                         <SelectItem value="in">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
-                            En Padrón
+                            En Siuben
                           </div>
                         </SelectItem>
                         <SelectItem value="out">
                           <div className="flex items-center gap-2">
                             <XCircle className="h-4 w-4 text-gray-400" />
-                            Fuera del Padrón
+                            Fuera del Siuben
                           </div>
                         </SelectItem>
                       </SelectContent>
@@ -5875,7 +5881,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                 <TableRow>
                   <TableHead className="min-w-[220px]">Beneficiario</TableHead>
                   <TableHead className="min-w-[140px]">Cédula</TableHead>
-                  <TableHead className="min-w-[130px]">Estado Padrón</TableHead>
+                  <TableHead className="min-w-[130px]">Estado Siuben</TableHead>
                   <TableHead className="min-w-[180px]">Contacto</TableHead>
                   <TableHead className="min-w-[120px]">Registro</TableHead>
                   <TableHead className="min-w-[100px]">Acciones</TableHead>
@@ -5935,12 +5941,12 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                 {selectedBeneficiary?.padronData?.found ? (
                   <Badge className="bg-green-100 text-green-800 border-green-300 shadow-sm">
                     <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
-                    Registrado en Padrón
+                    Registrado en Siuben
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-gray-600 border-gray-400">
                     <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
-                    No en Padrón
+                    No en Siuben
                   </Badge>
                 )}
                 {selectedBeneficiary?.email && selectedBeneficiary?.phoneNumber && (
@@ -6129,7 +6135,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                           </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-bold uppercase text-gray-600">Estado en Padrón</p>
+                          <p className="text-xs font-bold uppercase text-gray-600">Estado en Siuben</p>
                           {selectedBeneficiary.padronData?.found ? (
                             <Badge className="bg-green-100 text-green-800 border-green-200">
                               <CheckCircle className="h-3 w-3 mr-1" />
@@ -6163,7 +6169,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                     <Alert className="border-amber-200 bg-amber-50">
                       <AlertCircle className="h-4 w-4 text-amber-600" />
                       <AlertDescription className="text-amber-800">
-                        <strong>Información del Padrón no disponible.</strong> Este beneficiario no tiene datos asociados en el padrón nacional.
+                        <strong>Información del Siuben no disponible.</strong> Este beneficiario no tiene datos asociados en el Siuben.
                       </AlertDescription>
                     </Alert>
                   )}
