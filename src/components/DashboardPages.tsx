@@ -198,6 +198,8 @@ const getStatusBadge = (status: string | number) => {
     'Rejected': 'rejected',
     'Completed': 'completed',
     'Cancelled': 'cancelled',
+    'in-review': 'review',
+    'InReview': 'review',
   };
 
   const normalizedStatus = statusMap[statusStr] || statusStr.toLowerCase();
@@ -1281,11 +1283,23 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     setIsSubmittingStatusChange(true);
     setStatusChangeError(null);
 
+    // Map status number to status string expected by backend
+    const statusMap: Record<number, string> = {
+      1: 'pending',
+      2: 'in-review',
+      3: 'approved',
+      4: 'rejected',
+      5: 'completed',
+      6: 'cancelled'
+    };
+
     try {
-      const updatedRequest = await updateRequestStatus(authToken, requestId, {
-        status: statusNum,
-        notes: statusChangeNotes.trim() || undefined
+      const updatedRequest = await changeRequestStatus(authToken, requestId, {
+        status: statusMap[statusNum],
+        comment: statusChangeNotes.trim() || undefined
       });
+
+      console.log('Updated request from backend:', updatedRequest);
 
       if (updatedRequest) {
         // Update local state with the response from the server
@@ -1304,6 +1318,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         };
 
         toast.success(`Solicitud actualizada a: ${statusNames[statusNum]}`);
+        
+        // Reload requests to ensure we have the latest data
+        await loadRequests();
       }
 
       setShowStatusChangeModal(false);
@@ -2157,39 +2174,57 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       {/* Assignment Modal */}
       <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-xl">
               <UserPlus className="h-5 w-5 text-dr-blue" />
               Asignar Solicitud
             </DialogTitle>
             <DialogDescription>
-              Asigne la solicitud #{selectedRequest?.id} a un analista
+              Asigne la solicitud a un analista disponible
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Request Info */}
             {selectedRequest && (
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Solicitante:</span>
-                    <span className="text-sm font-semibold text-dr-dark-gray">{selectedRequest.applicant}</span>
+                    <span className="text-sm font-medium text-gray-700">Solicitante:</span>
+                    <span className="text-sm font-semibold text-gray-900">{selectedRequest.applicant}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Tipo:</span>
+                    <span className="text-sm font-medium text-gray-700">Tipo:</span>
                     <div className="flex items-center gap-2">
                       {getRequestTypeIcon(selectedRequest.type)}
-                      <span className="text-sm">{getRequestTypeName(selectedRequest.type)}</span>
+                      <span className="text-sm font-semibold text-gray-900">{getRequestTypeName(selectedRequest.type)}</span>
                     </div>
                   </div>
+                  
+                  {/* Current Assignment */}
+                  {(selectedRequest.assignedAnalystName || selectedRequest.assignedTo) && (
+                    <div className="mt-3 pt-3 border-t border-blue-300">
+                      <div className="flex items-center gap-2 mb-1">
+                        <UserCheck className="h-4 w-4 text-amber-600" />
+                        <span className="text-sm font-semibold text-amber-900">Asignado actualmente a:</span>
+                      </div>
+                      <p className="text-base font-bold text-amber-700 ml-6">
+                        {selectedRequest.assignedAnalystName || selectedRequest.assignedTo}
+                      </p>
+                      <p className="text-xs text-amber-600 ml-6 mt-1">
+                        Se reasignará al seleccionar otro analista
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="analyst">Seleccionar Analista *</Label>
+              <Label htmlFor="analyst" className="text-sm font-semibold text-gray-700">
+                Seleccionar Analista <span className="text-red-600">*</span>
+              </Label>
               <Select
                 value={selectedAnalyst}
                 onValueChange={setSelectedAnalyst}
@@ -2279,10 +2314,12 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="notes">Comentarios (Opcional)</Label>
+              <Label htmlFor="notes" className="text-sm font-semibold text-gray-700">
+                Comentarios <span className="text-gray-500 font-normal">(Opcional)</span>
+              </Label>
               <Textarea
                 id="notes"
-                placeholder="Agregue comentarios o instrucciones especiales para el analista..."
+                placeholder="Comentarios"
                 value={assignmentNotes}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAssignmentNotes(e.target.value)}
                 rows={3}
@@ -2309,7 +2346,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             <Button
               onClick={handleConfirmAssignment}
               disabled={!selectedAnalyst || isSubmittingAssignment || usingFallbackAnalysts}
-              className="bg-dr-blue hover:bg-dr-blue-dark"
+              className="bg-dr-blue hover:bg-blue-700"
             >
               {isSubmittingAssignment ? 'Asignando...' : 'Asignar Solicitud'}
             </Button>
@@ -2381,11 +2418,11 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Status Change Modal - Enhanced with Quick Actions */}
+      {/* Status Change Modal */}
       <Dialog open={showStatusChangeModal} onOpenChange={setShowStatusChangeModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-xl">
               <RefreshCw className="h-5 w-5 text-indigo-600" />
               Cambiar Estado de Solicitud
             </DialogTitle>
@@ -2394,10 +2431,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Request Info */}
             {selectedRequest && (
-              <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Solicitante:</span>
@@ -2409,7 +2446,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Tipo:</span>
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm font-semibold text-gray-900">
                       {selectedRequest.requestTypeNameSpanish || selectedRequest.requestTypeName || 'N/A'}
                     </span>
                   </div>
@@ -2423,9 +2460,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
             {/* Error Alert */}
             {statusChangeError && (
-              <Alert className="bg-red-50 border-red-200">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800 text-sm ml-2">
+              <Alert className="bg-red-50 border-2 border-red-200 shadow-sm">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <AlertDescription className="text-red-800 font-medium ml-2">
                   {statusChangeError}
                 </AlertDescription>
               </Alert>
@@ -2433,59 +2470,87 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
             {/* Status Selection */}
             <div className="space-y-2">
-              <Label htmlFor="status-select">Estado</Label>
+              <Label htmlFor="status-select" className="text-sm font-semibold text-gray-700">
+                Nuevo Estado <span className="text-red-600">*</span>
+              </Label>
               <Select value={selectedNewStatus} onValueChange={setSelectedNewStatus}>
                 <SelectTrigger id="status-select" className="w-full">
                   <SelectValue placeholder="Seleccione un estado" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="1">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-amber-600" />
-                      <span>Pendiente</span>
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="bg-amber-100 p-1.5 rounded-md">
+                        <Clock className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">Pendiente</span>
+                        <span className="text-xs text-gray-500">En espera de asignación</span>
+                      </div>
                     </div>
                   </SelectItem>
                   <SelectItem value="2">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-4 w-4 text-blue-600" />
-                      <span>En Revisión</span>
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="bg-blue-100 p-1.5 rounded-md">
+                        <Eye className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">En Revisión</span>
+                        <span className="text-xs text-gray-500">Siendo evaluada</span>
+                      </div>
                     </div>
                   </SelectItem>
                   <SelectItem value="3">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <span>Aprobada</span>
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="bg-green-100 p-1.5 rounded-md">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">Aprobada</span>
+                        <span className="text-xs text-gray-500">Solicitud aceptada</span>
+                      </div>
                     </div>
                   </SelectItem>
                   <SelectItem value="4">
-                    <div className="flex items-center gap-2">
-                      <XCircle className="h-4 w-4 text-red-600" />
-                      <span>Rechazada</span>
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="bg-red-100 p-1.5 rounded-md">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">Rechazada</span>
+                        <span className="text-xs text-gray-500">No cumple requisitos</span>
+                      </div>
                     </div>
                   </SelectItem>
-                  {isAdminRole && (
-                    <>
-                      <SelectItem value="5">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          <span>Completada</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="6">
-                        <div className="flex items-center gap-2">
-                          <X className="h-4 w-4 text-gray-600" />
-                          <span>Cancelada</span>
-                        </div>
-                      </SelectItem>
-                    </>
-                  )}
+                  <SelectItem value="5">
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="bg-emerald-100 p-1.5 rounded-md">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">Completada</span>
+                        <span className="text-xs text-gray-500">Proceso finalizado</span>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="6">
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="bg-gray-100 p-1.5 rounded-md">
+                        <X className="h-4 w-4 text-gray-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">Cancelada</span>
+                        <span className="text-xs text-gray-500">Solicitud anulada</span>
+                      </div>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Notes */}
             <div className="space-y-2">
-              <Label htmlFor="status-notes">
+              <Label htmlFor="status-notes" className="text-sm font-semibold text-gray-700">
                 Comentarios
                 {(selectedNewStatus === '4' || selectedNewStatus === '6') && (
                   <span className="text-red-600 ml-1">*</span>
@@ -2498,7 +2563,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                     ? 'Explique las razones del rechazo...'
                     : selectedNewStatus === '6'
                       ? 'Explique las razones de la cancelación...'
-                      : 'Agregue comentarios sobre el cambio de estado (opcional)...'
+                      : 'Comentarios'
                 }
                 value={statusChangeNotes}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStatusChangeNotes(e.target.value)}
@@ -2506,14 +2571,14 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 className="resize-none"
               />
               {(selectedNewStatus === '4' || selectedNewStatus === '6') && (
-                <p className="text-xs text-red-500 font-medium">
-                  Los comentarios son requeridos para acciones de rechazo o cancelación.
+                <p className="text-xs text-red-600 font-medium">
+                  Los comentarios son obligatorios para rechazos o cancelaciones.
                 </p>
               )}
             </div>
           </div>
 
-          <DialogFooter className="flex gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
@@ -2524,24 +2589,15 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               }}
               disabled={isSubmittingStatusChange}
             >
-              Cerrar
+              Cancelar
             </Button>
-            {selectedNewStatus && (
-              <Button
-                onClick={handleStatusChange}
-                disabled={isSubmittingStatusChange || !selectedNewStatus}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                {isSubmittingStatusChange ? (
-                  <span className="flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Actualizando...
-                  </span>
-                ) : (
-                  'Aplicar Estado Manual'
-                )}
-              </Button>
-            )}
+            <Button
+              onClick={handleStatusChange}
+              disabled={isSubmittingStatusChange || !selectedNewStatus}
+              className="bg-dr-blue hover:bg-blue-700"
+            >
+              {isSubmittingStatusChange ? 'Actualizando...' : 'Guardar Cambios'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2552,9 +2608,6 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
           {/* Header - Fixed */}
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-dr-blue to-dr-blue-light flex items-center justify-center shadow-sm">
-                <ClipboardList className="h-6 w-6 text-white" />
-              </div>
               <div className="flex-1 min-w-0">
                 <DialogTitle className="text-xl font-bold text-dr-dark-gray truncate">
                   Solicitud #{selectedRequest?.id?.substring(0, 8)}
@@ -2639,11 +2692,11 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       {(() => {
                         const currentStatus = normalizeStatus(selectedRequest.status);
                         const steps = [
-                          { key: 'pendiente', label: 'Recibida', icon: Clock, color: 'text-amber-600', bgColor: 'bg-amber-100', borderColor: 'border-amber-300' },
-                          { key: 'asignada', label: 'Asignada', icon: UserCheck, color: 'text-blue-600', bgColor: 'bg-blue-100', borderColor: 'border-blue-300' },
-                          { key: 'en revisión', label: 'En Revisión', icon: Eye, color: 'text-indigo-600', bgColor: 'bg-indigo-100', borderColor: 'border-indigo-300' },
-                          { key: 'aprobada', label: 'Aprobada', icon: CheckCircle, color: 'text-green-600', bgColor: 'bg-green-100', borderColor: 'border-green-300' },
-                          { key: 'completada', label: 'Completada', icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-100', borderColor: 'border-emerald-300' },
+                          { key: 'pendiente', label: 'Recibida', icon: Clock, color: 'text-amber-600', bgColor: 'bg-amber-50', activeBg: 'bg-amber-500', borderColor: 'border-amber-200' },
+                          { key: 'asignada', label: 'Asignada', icon: UserCheck, color: 'text-blue-600', bgColor: 'bg-blue-50', activeBg: 'bg-blue-500', borderColor: 'border-blue-200' },
+                          { key: 'en revisión', label: 'En Revisión', icon: Eye, color: 'text-indigo-600', bgColor: 'bg-indigo-50', activeBg: 'bg-indigo-500', borderColor: 'border-indigo-200' },
+                          { key: 'aprobada', label: 'Aprobada', icon: CheckCircle, color: 'text-green-600', bgColor: 'bg-green-50', activeBg: 'bg-green-500', borderColor: 'border-green-200' },
+                          { key: 'completada', label: 'Completada', icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-50', activeBg: 'bg-emerald-500', borderColor: 'border-emerald-200' },
                         ];
 
                         // Determinar el índice del paso actual
@@ -2654,7 +2707,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         return (
                           <div className="space-y-6">
                             {/* Stepper horizontal para desktop */}
-                            <div className="hidden md:flex items-center justify-between relative">
+                            <div className="hidden md:flex items-start justify-between relative px-4">
                               {steps.map((step, index) => {
                                 const StepIcon = step.icon;
                                 const isCompleted = index < currentStepIndex;
@@ -2663,38 +2716,45 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
                                 return (
                                   <React.Fragment key={step.key}>
-                                    <div className="flex flex-col items-center gap-2 relative z-10">
+                                    <div className="flex flex-col items-center gap-3 relative z-10 flex-1">
                                       <div
-                                        className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${
+                                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-200 ${
                                           isCompleted
-                                            ? `${step.bgColor} ${step.borderColor} ${step.color}`
+                                            ? `${step.activeBg} border-transparent text-white`
                                             : isCurrent
-                                            ? `${step.bgColor} ${step.borderColor} ${step.color} ring-4 ring-${step.color.split('-')[1]}-100 shadow-lg`
-                                            : 'bg-gray-100 border-gray-300 text-gray-400'
+                                            ? `${step.bgColor} ${step.borderColor} ${step.color} border-2`
+                                            : 'bg-gray-50 border-gray-300 text-gray-400'
                                         }`}
                                       >
                                         {isCompleted ? (
-                                          <Check className="h-6 w-6" />
+                                          <Check className="h-5 w-5 stroke-[2.5]" />
                                         ) : (
-                                          <StepIcon className="h-6 w-6" />
+                                          <StepIcon className="h-5 w-5" />
                                         )}
                                       </div>
-                                      <div className="text-center">
+                                      <div className="text-center max-w-[100px]">
                                         <p
-                                          className={`text-xs font-semibold ${
-                                            isCompleted || isCurrent ? 'text-dr-dark-gray' : 'text-gray-400'
+                                          className={`text-xs font-medium ${
+                                            isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-400'
                                           }`}
                                         >
                                           {step.label}
                                         </p>
+                                        {isCurrent && (
+                                          <span className="inline-block mt-1.5 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-medium">
+                                            Actual
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                     {index < steps.length - 1 && (
-                                      <div
-                                        className={`flex-1 h-0.5 mx-2 transition-all ${
-                                          index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
-                                        }`}
-                                      />
+                                      <div className="flex items-center pt-5 flex-1 max-w-[80px]">
+                                        <div
+                                          className={`h-[2px] w-full transition-all duration-200 ${
+                                            index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
+                                          }`}
+                                        />
+                                      </div>
                                     )}
                                   </React.Fragment>
                                 );
@@ -2702,7 +2762,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                             </div>
 
                             {/* Stepper vertical para móvil */}
-                            <div className="md:hidden space-y-4">
+                            <div className="md:hidden space-y-3">
                               {steps.map((step, index) => {
                                 const StepIcon = step.icon;
                                 const isCompleted = index < currentStepIndex;
@@ -2713,36 +2773,41 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                   <div key={step.key} className="flex items-start gap-3">
                                     <div className="flex flex-col items-center">
                                       <div
-                                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                        className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-200 ${
                                           isCompleted
-                                            ? `${step.bgColor} ${step.borderColor} ${step.color}`
+                                            ? `${step.activeBg} border-transparent text-white`
                                             : isCurrent
-                                            ? `${step.bgColor} ${step.borderColor} ${step.color} ring-4 ring-${step.color.split('-')[1]}-100`
-                                            : 'bg-gray-100 border-gray-300 text-gray-400'
+                                            ? `${step.bgColor} ${step.borderColor} ${step.color}`
+                                            : 'bg-gray-50 border-gray-300 text-gray-400'
                                         }`}
                                       >
                                         {isCompleted ? (
-                                          <Check className="h-5 w-5" />
+                                          <Check className="h-4 w-4 stroke-[2.5]" />
                                         ) : (
-                                          <StepIcon className="h-5 w-5" />
+                                          <StepIcon className="h-4 w-4" />
                                         )}
                                       </div>
                                       {index < steps.length - 1 && (
                                         <div
-                                          className={`w-0.5 h-8 my-1 transition-all ${
+                                          className={`w-[2px] h-8 my-1 transition-all duration-200 ${
                                             index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
                                           }`}
                                         />
                                       )}
                                     </div>
-                                    <div className="flex-1 pt-2">
+                                    <div className="flex-1 pt-1.5">
                                       <p
-                                        className={`text-sm font-semibold ${
-                                          isCompleted || isCurrent ? 'text-dr-dark-gray' : 'text-gray-400'
+                                        className={`text-sm font-medium ${
+                                          isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-400'
                                         }`}
                                       >
                                         {step.label}
                                       </p>
+                                      {isCurrent && (
+                                        <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-medium">
+                                          Actual
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 );
@@ -2751,10 +2816,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
                             {/* Estados especiales: Rechazada o Cancelada */}
                             {(isRejected || isCancelled) && (
-                              <div className={`mt-4 p-4 rounded-lg border-2 ${isRejected ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-300'}`}>
+                              <div className={`p-3 rounded-lg border ${isRejected ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-300'}`}>
                                 <div className="flex items-center gap-2">
-                                  <XCircle className={`h-5 w-5 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
-                                  <p className={`font-semibold ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
+                                  <XCircle className={`h-4 w-4 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
+                                  <p className={`text-sm font-medium ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
                                     Solicitud {isRejected ? 'Rechazada' : 'Cancelada'}
                                   </p>
                                 </div>

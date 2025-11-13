@@ -913,6 +913,9 @@ export async function getRequests(
     params.set('skip', String(options.skip));
   }
 
+  // Temporalmente usar datos locales
+  params.set('useLocalData', 'true');
+
   const path = params.toString() ? `/requests?${params.toString()}` : '/requests';
   const response = await apiFetch<unknown>(path, { token });
   return normalizeCollection<RequestDto>(response);
@@ -938,6 +941,9 @@ export async function getAssignedRequests(
   if (typeof options.skip === 'number') {
     params.set('skip', String(options.skip));
   }
+
+  // Temporalmente usar datos locales
+  params.set('useLocalData', 'true');
 
   const path = params.toString() ? `/requests/assigned?${params.toString()}` : '/requests/assigned';
   const response = await apiFetch<unknown>(path, { token });
