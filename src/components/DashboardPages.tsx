@@ -14,6 +14,8 @@ import {
   cancelRequest,
   reviewRequest,
   getRequestCountReport,
+  getRequestCountByStatus,
+  getMyRequestCountByStatus,
   getMonthlyRequestReport,
   getAnnualRequestReport,
   getActiveUsersReport,
@@ -304,29 +306,37 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
     normalizedRoleLabel.includes('analista') ||
     normalizedRoleLevel === 'analyst';
 
-  // Load stats from backend
-  useEffect(() => {
-    const loadStats = async () => {
-      if (!authToken) return;
-      
-      try {
-        setIsLoadingStats(true);
-        const [requestCount, activeUsers] = await Promise.all([
-          getRequestCountReport(authToken).catch(() => null),
-          getActiveUsersReport(authToken).catch(() => null),
-        ]);
-        
-        setRequestCountReport(requestCount);
-        setActiveUsersReport(activeUsers);
-      } catch (error) {
-        console.error('Error cargando estadísticas:', error);
-      } finally {
-        setIsLoadingStats(false);
-      }
-    };
+  // Load stats from backend - memoized function to reuse
+  const loadStats = useCallback(async () => {
+    if (!authToken) return;
 
-    loadStats();
-  }, [authToken]);
+    try {
+      setIsLoadingStats(true);
+      // Use different endpoints based on user role
+      // Analysts see only their assigned requests stats
+      // Admin/Supervisor see all requests stats
+      const statsEndpoint = isAnalyst
+        ? getMyRequestCountByStatus(authToken)
+        : getRequestCountByStatus(authToken);
+
+      const [requestCount, activeUsers] = await Promise.all([
+        statsEndpoint.catch(() => null),
+        getActiveUsersReport(authToken).catch(() => null),
+      ]);
+
+      setRequestCountReport(requestCount);
+      setActiveUsersReport(activeUsers);
+    } catch (error) {
+      console.error('Error cargando estadísticas:', error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, [authToken, isAnalyst]);
+
+  // Load stats on mount and when dependencies change
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
 
   const formatNumber = (num: number | undefined) => {
     if (!num) return '0';
@@ -342,102 +352,143 @@ export function DashboardOverview({ currentUser, authToken, onNavigate }: PagePr
           value: formatNumber(requestCountReport?.totalRequests),
           change: 'En el sistema',
           icon: ClipboardList,
-          color: 'text-dr-blue',
-          bg: 'bg-blue-50'
+          color: 'text-indigo-600',
+          bg: 'bg-indigo-50'
         },
         {
-          title: 'Usuarios Activos',
-          value: formatNumber(activeUsersReport?.totalActiveUsers),
-          change: 'En el sistema',
-          icon: UserPlus,
-          color: 'text-dr-blue',
-          bg: 'bg-blue-50'
-        },
-        {
-          title: 'Solicitudes Pendientes',
+          title: 'Pendientes',
           value: formatNumber(requestCountReport?.pendingRequests),
-          change: 'Por asignar',
+          change: 'Sin asignar',
           icon: Clock,
           color: 'text-amber-600',
           bg: 'bg-amber-50'
         },
         {
-          title: 'Solicitudes Aprobadas',
+          title: 'En Revisión',
+          value: formatNumber(requestCountReport?.inReviewRequests),
+          change: 'En proceso',
+          icon: Eye,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50'
+        },
+        {
+          title: 'Aprobadas',
           value: formatNumber(requestCountReport?.approvedRequests),
-          change: 'Completadas',
+          change: 'Aceptadas',
           icon: CheckCircle,
           color: 'text-green-600',
           bg: 'bg-green-50'
+        },
+        {
+          title: 'Rechazadas',
+          value: formatNumber(requestCountReport?.rejectedRequests),
+          change: 'No aprobadas',
+          icon: XCircle,
+          color: 'text-red-600',
+          bg: 'bg-red-50'
+        },
+        {
+          title: 'Completadas',
+          value: formatNumber(requestCountReport?.completedRequests),
+          change: 'Finalizadas',
+          icon: CheckCircle2,
+          color: 'text-emerald-600',
+          bg: 'bg-emerald-50'
+        },
+        {
+          title: 'Canceladas',
+          value: formatNumber(requestCountReport?.cancelledRequests),
+          change: 'Anuladas',
+          icon: X,
+          color: 'text-gray-600',
+          bg: 'bg-gray-50'
         },
       ];
     } else if (isSupervisor) {
       return [
         {
-          title: 'Solicitudes sin Asignar',
-          value: formatNumber(requestCountReport?.pendingRequests),
-          change: 'Requieren asignación',
+          title: 'Total',
+          value: formatNumber(requestCountReport?.totalRequests),
+          change: 'Todas las solicitudes',
           icon: ClipboardList,
-          color: 'text-dr-blue',
-          bg: 'bg-blue-50'
+          color: 'text-indigo-600',
+          bg: 'bg-indigo-50'
         },
         {
-          title: 'Solicitudes Asignadas',
-          value: formatNumber(requestCountReport?.assignedRequests),
-          change: 'En proceso',
+          title: 'Pendientes',
+          value: formatNumber(requestCountReport?.pendingRequests),
+          change: 'Sin asignar',
           icon: Clock,
           color: 'text-amber-600',
           bg: 'bg-amber-50'
         },
         {
-          title: 'Solicitudes Aprobadas',
+          title: 'En Revisión',
+          value: formatNumber(requestCountReport?.inReviewRequests),
+          change: 'En proceso',
+          icon: Eye,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50'
+        },
+        {
+          title: 'Aprobadas',
           value: formatNumber(requestCountReport?.approvedRequests),
-          change: 'Completadas',
+          change: 'Aceptadas',
           icon: CheckCircle,
           color: 'text-green-600',
           bg: 'bg-green-50'
         },
         {
-          title: 'En Revisión',
-          value: formatNumber(requestCountReport?.inReviewRequests),
-          change: 'Requieren aprobación',
-          icon: Users,
-          color: 'text-purple-600',
-          bg: 'bg-purple-50'
-        },
-      ];
-    } else {
-      return [
-        {
-          title: 'Solicitudes Asignadas',
-          value: formatNumber(requestCountReport?.assignedRequests),
-          change: 'A mi cargo',
-          icon: ClipboardList,
-          color: 'text-dr-blue',
-          bg: 'bg-blue-50'
-        },
-        {
-          title: 'En Revisión',
-          value: formatNumber(requestCountReport?.inReviewRequests),
-          change: 'Requieren atención',
-          icon: Clock,
-          color: 'text-amber-600',
-          bg: 'bg-amber-50'
+          title: 'Rechazadas',
+          value: formatNumber(requestCountReport?.rejectedRequests),
+          change: 'No aprobadas',
+          icon: XCircle,
+          color: 'text-red-600',
+          bg: 'bg-red-50'
         },
         {
           title: 'Completadas',
-          value: formatNumber(requestCountReport?.approvedRequests),
-          change: 'Aprobadas',
-          icon: CheckCircle,
-          color: 'text-green-600',
-          bg: 'bg-green-50'
+          value: formatNumber(requestCountReport?.completedRequests),
+          change: 'Finalizadas',
+          icon: CheckCircle2,
+          color: 'text-emerald-600',
+          bg: 'bg-emerald-50'
+        },
+      ];
+    } else {
+      // Analyst view - only their assigned requests
+      return [
+        {
+          title: 'Mis Solicitudes',
+          value: formatNumber(requestCountReport?.totalRequests),
+          change: 'Asignadas a mí',
+          icon: ClipboardList,
+          color: 'text-indigo-600',
+          bg: 'bg-indigo-50'
         },
         {
-          title: 'Mi Eficiencia',
-          value: '94%',
-          change: 'este mes',
-          icon: TrendingUp,
-          color: 'text-green-600',
-          bg: 'bg-green-50'
+          title: 'Pendientes',
+          value: formatNumber(requestCountReport?.pendingRequests),
+          change: 'Por revisar',
+          icon: Clock,
+          color: 'text-amber-600',
+          bg: 'bg-amber-50'
+        },
+        {
+          title: 'En Revisión',
+          value: formatNumber(requestCountReport?.inReviewRequests),
+          change: 'En proceso',
+          icon: Eye,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50'
+        },
+        {
+          title: 'Completadas',
+          value: formatNumber(requestCountReport?.completedRequests),
+          change: 'Finalizadas',
+          icon: CheckCircle2,
+          color: 'text-emerald-600',
+          bg: 'bg-emerald-50'
         },
       ];
     }
@@ -1104,8 +1155,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 description: 'La solicitud ha sido marcada como en revisión',
                 duration: 3000,
               });
-              // Recargar la lista de solicitudes
-              await loadRequests();
+              // Recargar la lista de solicitudes y estadísticas
+              await Promise.all([loadRequests(), loadStats()]);
             } else {
               setSelectedRequest(fullRequest);
             }
@@ -1240,7 +1291,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         );
       }
 
-      await loadRequests();
+      // Reload requests and stats to get fresh data
+      await Promise.all([loadRequests(), loadStats()]);
 
       const resolvedId = resolveRequestId(updatedRequest ?? selectedRequest) ?? requestId;
       const applicantName =
@@ -1466,8 +1518,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         duration: 4000,
       });
 
-      // Reload requests to get fresh data
-      await loadRequests();
+      // Reload requests and stats to get fresh data
+      await Promise.all([loadRequests(), loadStats()]);
 
       setShowStatusChangeModal(false);
       setSelectedNewStatus('');
@@ -3175,8 +3227,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                   // Recargar la solicitud
                                   const updated = await getRequestById(selectedRequest.id, authToken);
                                   setSelectedRequest(updated);
-                                  // Recargar lista de solicitudes
-                                  await loadRequests();
+                                  // Recargar lista de solicitudes y estadísticas
+                                  await Promise.all([loadRequests(), loadStats()]);
                                 } catch (error: any) {
                                   toast.error(error.message || 'Error al actualizar el estado');
                                 }

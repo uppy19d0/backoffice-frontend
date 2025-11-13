@@ -914,8 +914,8 @@ export async function getRequests(
     params.set('skip', String(options.skip));
   }
 
-  // Temporalmente usar datos locales
-  params.set('useLocalData', 'true');
+  // Removed useLocalData to always fetch fresh data from server
+  // params.set('useLocalData', 'true');
 
   const path = params.toString() ? `/requests?${params.toString()}` : '/requests';
   const response = await apiFetch<unknown>(path, { token });
@@ -943,8 +943,8 @@ export async function getAssignedRequests(
     params.set('skip', String(options.skip));
   }
 
-  // Temporalmente usar datos locales
-  params.set('useLocalData', 'true');
+  // Removed useLocalData to always fetch fresh data from server
+  // params.set('useLocalData', 'true');
 
   const path = params.toString() ? `/requests/assigned?${params.toString()}` : '/requests/assigned';
   const response = await apiFetch<unknown>(path, { token });
@@ -1179,6 +1179,15 @@ export interface RequestCountReportDto extends Record<string, unknown> {
   inReviewRequests?: number;
   approvedRequests?: number;
   rejectedRequests?: number;
+  completedRequests?: number;
+  cancelledRequests?: number;
+  // Backend response format (PascalCase)
+  Pending?: number;
+  InReview?: number;
+  Approved?: number;
+  Rejected?: number;
+  Completed?: number;
+  Cancelled?: number;
 }
 
 export interface MonthlyRequestReportDto extends Record<string, unknown> {
@@ -1226,9 +1235,49 @@ export interface UsersByRoleReportResponse extends Record<string, unknown> {
   roleGroups?: UsersByRoleItem[];
 }
 
+// Helper function to normalize stats response from backend
+function normalizeStatsResponse(data: RequestCountReportDto): RequestCountReportDto {
+  // Backend returns PascalCase keys, normalize to camelCase with 'Requests' suffix
+  const normalized: RequestCountReportDto = {
+    totalRequests: data.totalRequests || 0,
+    pendingRequests: data.Pending || data.pendingRequests || 0,
+    inReviewRequests: data.InReview || data.inReviewRequests || 0,
+    approvedRequests: data.Approved || data.approvedRequests || 0,
+    rejectedRequests: data.Rejected || data.rejectedRequests || 0,
+    completedRequests: data.Completed || data.completedRequests || 0,
+    cancelledRequests: data.Cancelled || data.cancelledRequests || 0,
+    assignedRequests: data.assignedRequests || 0,
+  };
+
+  // Calculate total if not provided
+  if (!normalized.totalRequests) {
+    normalized.totalRequests =
+      (normalized.pendingRequests || 0) +
+      (normalized.inReviewRequests || 0) +
+      (normalized.approvedRequests || 0) +
+      (normalized.rejectedRequests || 0) +
+      (normalized.completedRequests || 0) +
+      (normalized.cancelledRequests || 0);
+  }
+
+  return normalized;
+}
+
 // Report API functions
 export async function getRequestCountReport(token: string): Promise<RequestCountReportDto> {
   return apiFetch<RequestCountReportDto>('/reports/requests/count', { token });
+}
+
+// Stats endpoints - count by status for admins/supervisors (all requests)
+export async function getRequestCountByStatus(token: string): Promise<RequestCountReportDto> {
+  const data = await apiFetch<RequestCountReportDto>('/requests/stats/count-by-status', { token });
+  return normalizeStatsResponse(data);
+}
+
+// Stats endpoints - count by status for analysts (only their assigned requests)
+export async function getMyRequestCountByStatus(token: string): Promise<RequestCountReportDto> {
+  const data = await apiFetch<RequestCountReportDto>('/requests/stats/my-count-by-status', { token });
+  return normalizeStatsResponse(data);
 }
 
 export async function getMonthlyRequestReport(
