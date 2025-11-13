@@ -845,6 +845,7 @@ export interface RequestDto extends Record<string, unknown> {
   submittedAt?: string | null;
   completedAt?: string | null;
   notes?: string | null;
+  comment?: string | null;
   externalReference?: string | null;
   assignedAnalystId?: string | null;
   assignedAnalystName?: string | null;

@@ -151,7 +151,7 @@ const MANAGER_PERMISSIONS: Permissions = {
 
 const ANALYST_PERMISSIONS: Permissions = {
   canCreateUsers: false,
-  canApproveRequests: false,
+  canApproveRequests: true,
   canReviewRequests: true,
   canViewReports: false,
   canManageBeneficiaries: false,

@@ -904,6 +904,35 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   }, [analysts, selectedRequest, showAssignModal]);
 
   // Helper function to normalize status (convert number to string in Spanish)
+  // Helper function to convert status string to numeric value for modal
+  const statusToNumeric = (status: string | number): string => {
+    const statusStr = String(status).toLowerCase().trim();
+    const statusNumericMap: Record<string, string> = {
+      'pending': '1',
+      'pendiente': '1',
+      'review': '2',
+      'in-review': '2',
+      'inreview': '2',
+      'en revisión': '2',
+      'en revision': '2',
+      'approved': '3',
+      'aprobada': '3',
+      'rejected': '4',
+      'rechazada': '4',
+      'completed': '5',
+      'completada': '5',
+      'cancelled': '6',
+      'cancelada': '6',
+      '1': '1',
+      '2': '2',
+      '3': '3',
+      '4': '4',
+      '5': '5',
+      '6': '6'
+    };
+    return statusNumericMap[statusStr] || '1';
+  };
+
   const normalizeStatus = (status: string | number): string => {
     const statusMap: Record<string, string> = {
       '0': 'pendiente',
@@ -1060,7 +1089,38 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     try {
       // Cargar datos completos de la solicitud individual (con beneficiary y padronData)
       const fullRequest = await getRequestById(authToken, request.id!);
-      setSelectedRequest(fullRequest);
+
+      // Si es un analista y la solicitud está en estado "pending" (1), cambiarla automáticamente a "in-review" (2)
+      if (isAnalystRole && authToken && fullRequest) {
+        const currentStatus = String(fullRequest.status);
+        if (currentStatus === '1' || currentStatus === 'pending') {
+          try {
+            const updatedRequest = await reviewRequest(authToken, fullRequest.id!, {
+              notes: 'Solicitud puesta en revisión automáticamente al abrir detalles'
+            });
+            if (updatedRequest) {
+              setSelectedRequest(updatedRequest);
+              toast.success('Solicitud puesta en revisión', {
+                description: 'La solicitud ha sido marcada como en revisión',
+                duration: 3000,
+              });
+              // Recargar la lista de solicitudes
+              await loadRequests();
+            } else {
+              setSelectedRequest(fullRequest);
+            }
+          } catch (error) {
+            console.error('Error auto-updating status to in-review:', error);
+            // Si falla el cambio automático, mostrar la solicitud de todas formas
+            setSelectedRequest(fullRequest);
+          }
+        } else {
+          setSelectedRequest(fullRequest);
+        }
+      } else {
+        setSelectedRequest(fullRequest);
+      }
+
       setShowViewModal(true);
     } catch (error) {
       console.error('Error loading request details:', error);
@@ -1864,15 +1924,17 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                           <Eye className="h-4 w-4" />
                         </Button>
 
-                        {/* Status change button for supervisors and admins */}
-                        {(isSupervisorRole || isAdminRole) && (
+                        {/* Status change button for supervisors, admins and analysts */}
+                        {(isSupervisorRole || isAdminRole || isAnalystRole) && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => {
                               setSelectedRequest(request);
-                              setSelectedNewStatus(String(request.status) || '1');
-                              setStatusChangeNotes('');
+                              // Convert current status to numeric format for the select dropdown
+                              setSelectedNewStatus(statusToNumeric(request.status || '1'));
+                              // Load existing comment if available
+                              setStatusChangeNotes(request.comment || '');
                               setStatusChangeError(null);
                               setShowStatusChangeModal(true);
                             }}
@@ -2424,13 +2486,24 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       {/* Status Change Modal */}
       <Dialog open={showStatusChangeModal} onOpenChange={setShowStatusChangeModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <RefreshCw className="h-5 w-5 text-indigo-600" />
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {/* Custom Close Button */}
+          <button
+            onClick={() => setShowStatusChangeModal(false)}
+            className="absolute right-4 top-4 z-50 rounded-lg p-2 bg-white/80 hover:bg-white border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all duration-200 group"
+            aria-label="Cerrar"
+          >
+            <X className="h-5 w-5 text-gray-500 group-hover:text-gray-700 transition-colors" />
+          </button>
+
+          <DialogHeader className="pr-10">
+            <DialogTitle className="flex items-center gap-3 text-xl">
+              <div className="p-2 bg-indigo-600 rounded-lg">
+                <RefreshCw className="h-5 w-5 text-white" />
+              </div>
               Cambiar Estado de Solicitud
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="ml-11 text-gray-600">
               Actualice el estado de la solicitud #{selectedRequest?.id?.substring(0, 8)}
             </DialogDescription>
           </DialogHeader>
@@ -2462,6 +2535,108 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               </div>
             )}
 
+            {/* Workflow Guide */}
+            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="bg-indigo-600 p-1.5 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-gray-900">Guía del Flujo de Estados</h3>
+              </div>
+
+              {/* Visual Flow */}
+              <div className="relative mb-4">
+                <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-indigo-300 to-transparent" style={{ height: 'calc(100% - 40px)' }}></div>
+
+                <div className="space-y-3">
+                  {/* Step 1 - Pendiente */}
+                  <div className="flex gap-4">
+                    <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center ${statusToNumeric(selectedRequest?.status) === '1' ? 'bg-amber-500 ring-4 ring-amber-200' : 'bg-amber-100'}`}>
+                      <Clock className={`h-6 w-6 ${statusToNumeric(selectedRequest?.status) === '1' ? 'text-white' : 'text-amber-600'}`} />
+                    </div>
+                    <div className="flex-1 bg-white rounded-lg p-3 shadow-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">1. Pendiente</span>
+                        {statusToNumeric(selectedRequest?.status) === '1' && (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-semibold">Estado Actual</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600">Solicitud recibida, en espera de ser asignada a un analista para revisión.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 2 - En Revisión */}
+                  <div className="flex gap-4">
+                    <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center ${statusToNumeric(selectedRequest?.status) === '2' ? 'bg-blue-500 ring-4 ring-blue-200' : 'bg-blue-100'}`}>
+                      <Eye className={`h-6 w-6 ${statusToNumeric(selectedRequest?.status) === '2' ? 'text-white' : 'text-blue-600'}`} />
+                    </div>
+                    <div className="flex-1 bg-white rounded-lg p-3 shadow-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">2. En Revisión</span>
+                        {statusToNumeric(selectedRequest?.status) === '2' && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">Estado Actual</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600">Analista evaluando documentación, datos y requisitos de la solicitud.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3 - Decisión */}
+                  <div className="flex gap-4">
+                    <div className="flex-shrink-0 w-16 h-16 rounded-xl bg-purple-100 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 bg-white rounded-lg p-3 shadow-sm">
+                      <span className="font-bold text-gray-900 block mb-1">3. Decisión</span>
+                      <p className="text-xs text-gray-600 mb-2">El analista debe decidir el resultado de la revisión:</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 p-2 bg-green-50 rounded border border-green-200">
+                          <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                          <span className="text-green-700 font-medium">Aprobar</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 p-2 bg-red-50 rounded border border-red-200">
+                          <XCircle className="h-3.5 w-3.5 text-red-600" />
+                          <span className="text-red-700 font-medium">Rechazar</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 4 - Completar */}
+                  <div className="flex gap-4">
+                    <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center ${statusToNumeric(selectedRequest?.status) === '5' ? 'bg-emerald-500 ring-4 ring-emerald-200' : 'bg-emerald-100'}`}>
+                      <CheckCircle2 className={`h-6 w-6 ${statusToNumeric(selectedRequest?.status) === '5' ? 'text-white' : 'text-emerald-600'}`} />
+                    </div>
+                    <div className="flex-1 bg-white rounded-lg p-3 shadow-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">4. Completada</span>
+                        {statusToNumeric(selectedRequest?.status) === '5' && (
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-semibold">Estado Actual</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600">Solicitud procesada exitosamente y cerrada. Proceso finalizado.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs text-blue-800">
+                    <span className="font-semibold">Nota:</span> Los estados <span className="font-semibold">Rechazada</span> y <span className="font-semibold">Cancelada</span> requieren comentarios obligatorios explicando la razón.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Error Alert */}
             {statusChangeError && (
               <Alert className="bg-red-50 border-2 border-red-200 shadow-sm">
@@ -2473,77 +2648,133 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             )}
 
             {/* Status Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="status-select" className="text-sm font-semibold text-gray-700">
+            <div className="space-y-3">
+              <Label htmlFor="status-select" className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-indigo-600" />
                 Nuevo Estado <span className="text-red-600">*</span>
               </Label>
               <Select value={selectedNewStatus} onValueChange={setSelectedNewStatus}>
-                <SelectTrigger id="status-select" className="w-full">
-                  <SelectValue placeholder="Seleccione un estado" />
+                <SelectTrigger id="status-select" className="w-full h-14 border-2 hover:border-indigo-300 focus:border-indigo-500 transition-colors">
+                  <SelectValue placeholder="Seleccione un estado">
+                    {selectedNewStatus && (() => {
+                      const statusConfig: Record<string, { icon: React.ReactNode; label: string; bgColor: string; textColor: string }> = {
+                        '1': {
+                          icon: <Clock className="h-4 w-4" />,
+                          label: 'Pendiente',
+                          bgColor: 'bg-amber-100',
+                          textColor: 'text-amber-700'
+                        },
+                        '2': {
+                          icon: <Eye className="h-4 w-4" />,
+                          label: 'En Revisión',
+                          bgColor: 'bg-blue-100',
+                          textColor: 'text-blue-700'
+                        },
+                        '3': {
+                          icon: <CheckCircle className="h-4 w-4" />,
+                          label: 'Aprobada',
+                          bgColor: 'bg-green-100',
+                          textColor: 'text-green-700'
+                        },
+                        '4': {
+                          icon: <XCircle className="h-4 w-4" />,
+                          label: 'Rechazada',
+                          bgColor: 'bg-red-100',
+                          textColor: 'text-red-700'
+                        },
+                        '5': {
+                          icon: <CheckCircle2 className="h-4 w-4" />,
+                          label: 'Completada',
+                          bgColor: 'bg-emerald-100',
+                          textColor: 'text-emerald-700'
+                        },
+                        '6': {
+                          icon: <X className="h-4 w-4" />,
+                          label: 'Cancelada',
+                          bgColor: 'bg-gray-100',
+                          textColor: 'text-gray-700'
+                        }
+                      };
+                      const config = statusConfig[selectedNewStatus];
+                      if (config) {
+                        return (
+                          <div className="flex items-center gap-3">
+                            <div className={`${config.bgColor} p-2 rounded-lg ${config.textColor}`}>
+                              {config.icon}
+                            </div>
+                            <span className={`font-semibold ${config.textColor} text-base`}>
+                              {config.label}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="bg-amber-100 p-1.5 rounded-md">
-                        <Clock className="h-4 w-4 text-amber-600" />
+                <SelectContent className="max-h-[400px]">
+                  <SelectItem value="1" className="cursor-pointer py-3 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-amber-100 p-2 rounded-lg">
+                        <Clock className="h-5 w-5 text-amber-600" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium">Pendiente</span>
+                        <span className="font-semibold text-gray-900">Pendiente</span>
                         <span className="text-xs text-gray-500">En espera de asignación</span>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="2">
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="bg-blue-100 p-1.5 rounded-md">
-                        <Eye className="h-4 w-4 text-blue-600" />
+                  <SelectItem value="2" className="cursor-pointer py-3 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-100 p-2 rounded-lg">
+                        <Eye className="h-5 w-5 text-blue-600" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium">En Revisión</span>
+                        <span className="font-semibold text-gray-900">En Revisión</span>
                         <span className="text-xs text-gray-500">Siendo evaluada</span>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="3">
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="bg-green-100 p-1.5 rounded-md">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
+                  <SelectItem value="3" className="cursor-pointer py-3 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-green-100 p-2 rounded-lg">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium">Aprobada</span>
+                        <span className="font-semibold text-gray-900">Aprobada</span>
                         <span className="text-xs text-gray-500">Solicitud aceptada</span>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="4">
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="bg-red-100 p-1.5 rounded-md">
-                        <XCircle className="h-4 w-4 text-red-600" />
+                  <SelectItem value="4" className="cursor-pointer py-3 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-red-100 p-2 rounded-lg">
+                        <XCircle className="h-5 w-5 text-red-600" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium">Rechazada</span>
+                        <span className="font-semibold text-gray-900">Rechazada</span>
                         <span className="text-xs text-gray-500">No cumple requisitos</span>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="5">
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="bg-emerald-100 p-1.5 rounded-md">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <SelectItem value="5" className="cursor-pointer py-3 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-emerald-100 p-2 rounded-lg">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium">Completada</span>
+                        <span className="font-semibold text-gray-900">Completada</span>
                         <span className="text-xs text-gray-500">Proceso finalizado</span>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="6">
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="bg-gray-100 p-1.5 rounded-md">
-                        <X className="h-4 w-4 text-gray-600" />
+                  <SelectItem value="6" className="cursor-pointer py-3 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gray-100 p-2 rounded-lg">
+                        <X className="h-5 w-5 text-gray-600" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium">Cancelada</span>
+                        <span className="font-semibold text-gray-900">Cancelada</span>
                         <span className="text-xs text-gray-500">Solicitud anulada</span>
                       </div>
                     </div>
@@ -2608,15 +2839,29 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       {/* View Request Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-7xl max-h-[90vh] p-0 gap-0 flex flex-col">
+        <DialogContent className="max-w-7xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+          {/* Custom Close Button */}
+          <button
+            onClick={() => setShowViewModal(false)}
+            className="absolute right-4 top-4 z-50 rounded-lg p-2 bg-white/80 hover:bg-white border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all duration-200 group"
+            aria-label="Cerrar"
+          >
+            <X className="h-5 w-5 text-gray-500 group-hover:text-gray-700 transition-colors" />
+          </button>
+
           {/* Header - Fixed */}
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200 flex-shrink-0">
-            <div className="flex items-center gap-4">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200 flex-shrink-0 bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
+            <div className="flex items-center gap-4 pr-10">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg">
+                  <FileText className="h-6 w-6 text-white" />
+                </div>
+              </div>
               <div className="flex-1 min-w-0">
-                <DialogTitle className="text-xl font-bold text-dr-dark-gray truncate">
+                <DialogTitle className="text-xl font-bold text-gray-900 truncate flex items-center gap-2">
                   Solicitud #{selectedRequest?.id?.substring(0, 8)}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-gray-600 truncate">
+                <DialogDescription className="text-sm text-gray-600 truncate mt-1">
                   {selectedRequest?.requestTypeNameSpanish || selectedRequest?.requestTypeName || selectedRequest?.type || 'Solicitud'} {selectedRequest?.beneficiary && `• ${selectedRequest.beneficiary.firstName} ${selectedRequest.beneficiary.lastName}`}
                 </DialogDescription>
               </div>
@@ -2625,14 +2870,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                   {selectedRequest && getStatusBadge(selectedRequest.status)}
                 </div>
                 {selectedRequest?.submittedAt && (
-                  <span className="text-xs text-gray-500">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Clock className="h-3 w-3" />
                     {new Date(selectedRequest.submittedAt).toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
+                  </div>
                 )}
                 {!selectedRequest?.submittedAt && selectedRequest?.date && (
-                  <span className="text-xs text-gray-500">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Clock className="h-3 w-3" />
                     {selectedRequest.date}
-                  </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -2685,133 +2932,203 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               {/* Tab: Solicitud */}
               <TabsContent value="solicitud" className="flex-1 overflow-y-auto px-6 py-6 space-y-5 m-0 focus-visible:outline-none focus-visible:ring-0">
                   {/* Indicador de Proceso */}
-                  <Card className="border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                    <CardHeader className="bg-white border-b border-gray-100 pb-4">
-                      <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
-                        <ArrowRight className="h-5 w-5 text-dr-blue" />
-                        Progreso de la Solicitud
+                  <Card className="border-2 border-indigo-200 shadow-lg hover:shadow-xl transition-all">
+                    <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100 pb-4">
+                      <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-3">
+                        <div className="p-2 bg-indigo-600 rounded-lg">
+                          <ArrowRight className="h-5 w-5 text-white" />
+                        </div>
+                        Guía del Proceso de Solicitud
                       </CardTitle>
+                      <p className="text-sm text-gray-600 mt-2 ml-11">
+                        Visualiza en qué etapa se encuentra esta solicitud y qué pasos siguen
+                      </p>
                     </CardHeader>
-                    <CardContent className="pt-10 pb-10 px-8 bg-gray-50/50">
+                    <CardContent className="pt-8 pb-8 px-4 sm:px-8 bg-gradient-to-br from-gray-50/50 to-white">
                       {(() => {
                         const currentStatus = normalizeStatus(selectedRequest.status);
-                        const steps = [
-                          { key: 'pendiente', label: 'Recibida', icon: Clock },
-                          { key: 'asignada', label: 'Asignada', icon: UserCheck },
-                          { key: 'en revisión', label: 'En Revisión', icon: Eye },
-                          { key: 'aprobada', label: 'Aprobada', icon: CheckCircle },
-                          { key: 'completada', label: 'Completada', icon: CheckCircle2 },
-                        ];
-
-                        const currentStepIndex = steps.findIndex(step => step.key === currentStatus);
                         const isRejected = currentStatus === 'rechazada';
                         const isCancelled = currentStatus === 'cancelada';
 
+                        const steps = [
+                          {
+                            key: 'pendiente',
+                            label: 'Pendiente',
+                            icon: Clock,
+                            description: 'Solicitud recibida, en espera de ser asignada a un analista.',
+                            color: 'amber'
+                          },
+                          {
+                            key: 'en revisión',
+                            label: 'En Revisión',
+                            icon: Eye,
+                            description: 'Analista evaluando documentación, datos y requisitos.',
+                            color: 'blue'
+                          },
+                          {
+                            key: 'aprobada',
+                            label: 'Aprobada',
+                            icon: CheckCircle,
+                            description: 'Solicitud aceptada y lista para completarse.',
+                            color: 'green'
+                          },
+                          {
+                            key: 'completada',
+                            label: 'Completada',
+                            icon: CheckCircle2,
+                            description: 'Proceso finalizado exitosamente.',
+                            color: 'emerald'
+                          },
+                        ];
+
+                        const currentStepIndex = steps.findIndex(step => step.key === currentStatus);
+
+                        const colorClasses = {
+                          amber: {
+                            bg: 'bg-amber-100',
+                            bgActive: 'bg-amber-500',
+                            ring: 'ring-amber-200',
+                            text: 'text-amber-600',
+                            textActive: 'text-amber-700',
+                            border: 'border-amber-200'
+                          },
+                          blue: {
+                            bg: 'bg-blue-100',
+                            bgActive: 'bg-blue-500',
+                            ring: 'ring-blue-200',
+                            text: 'text-blue-600',
+                            textActive: 'text-blue-700',
+                            border: 'border-blue-200'
+                          },
+                          green: {
+                            bg: 'bg-green-100',
+                            bgActive: 'bg-green-500',
+                            ring: 'ring-green-200',
+                            text: 'text-green-600',
+                            textActive: 'text-green-700',
+                            border: 'border-green-200'
+                          },
+                          emerald: {
+                            bg: 'bg-emerald-100',
+                            bgActive: 'bg-emerald-500',
+                            ring: 'ring-emerald-200',
+                            text: 'text-emerald-600',
+                            textActive: 'text-emerald-700',
+                            border: 'border-emerald-200'
+                          }
+                        };
+
                         return (
-                          <div className="space-y-6">
-                            {/* Stepper horizontal para desktop */}
-                            <div className="hidden md:block">
-                              <div className="relative flex items-center justify-between px-4">
+                          <div className="space-y-4">
+                            {/* Timeline Visual - Responsive */}
+                            <div className="relative">
+                              {/* Línea conectora - Hidden on mobile, visible on md+ */}
+                              <div className="hidden md:block absolute left-8 top-0 w-0.5 bg-gradient-to-b from-indigo-300 via-indigo-200 to-transparent" style={{ height: 'calc(100% - 30px)' }}></div>
+
+                              <div className="space-y-3">
                                 {steps.map((step, index) => {
                                   const StepIcon = step.icon;
                                   const isCompleted = index < currentStepIndex;
                                   const isCurrent = index === currentStepIndex;
+                                  const colors = colorClasses[step.color as keyof typeof colorClasses];
 
                                   return (
-                                    <React.Fragment key={step.key}>
-                                      <div className="flex flex-col items-center gap-3 relative z-10">
-                                        {/* Círculo */}
-                                        <div
-                                          className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${
-                                            isCompleted
-                                              ? 'bg-dr-blue border-dr-blue text-white'
-                                              : isCurrent
-                                              ? 'bg-white border-dr-blue text-dr-blue'
-                                              : 'bg-white border-gray-300 text-gray-400'
-                                          }`}
-                                        >
-                                          {isCompleted ? (
-                                            <Check className="h-5 w-5 stroke-[2.5]" />
-                                          ) : (
-                                            <StepIcon className="h-5 w-5" />
+                                    <div key={step.key} className="flex gap-3 sm:gap-4">
+                                      {/* Icon Badge */}
+                                      <div className={`flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                                        isCurrent
+                                          ? `${colors.bgActive} ring-4 ${colors.ring} shadow-lg`
+                                          : isCompleted
+                                            ? 'bg-gradient-to-br from-indigo-500 to-blue-600 shadow-md'
+                                            : colors.bg
+                                      }`}>
+                                        {isCompleted ? (
+                                          <Check className="h-6 w-6 sm:h-7 sm:w-7 text-white stroke-[2.5]" />
+                                        ) : (
+                                          <StepIcon className={`h-5 w-5 sm:h-6 sm:w-6 ${isCurrent ? 'text-white' : colors.text}`} />
+                                        )}
+                                      </div>
+
+                                      {/* Content Card */}
+                                      <div className={`flex-1 bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-sm border-2 transition-all duration-300 ${
+                                        isCurrent
+                                          ? `${colors.border} shadow-md`
+                                          : isCompleted
+                                            ? 'border-indigo-200 bg-indigo-50/30'
+                                            : 'border-gray-200'
+                                      }`}>
+                                        <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                                          <span className={`text-sm sm:text-base font-bold ${
+                                            isCurrent || isCompleted ? 'text-gray-900' : 'text-gray-600'
+                                          }`}>
+                                            {index + 1}. {step.label}
+                                          </span>
+                                          {isCurrent && (
+                                            <span className={`text-xs px-2 py-1 rounded-full font-semibold ${colors.bg} ${colors.textActive}`}>
+                                              Etapa Actual
+                                            </span>
+                                          )}
+                                          {isCompleted && !isCurrent && (
+                                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-semibold flex items-center gap-1">
+                                              <Check className="h-3 w-3" />
+                                              Completada
+                                            </span>
                                           )}
                                         </div>
-                                        
-                                        {/* Label */}
-                                        <div className="text-center">
-                                          <p className={`text-sm font-medium ${isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-500'}`}>
-                                            {step.label}
-                                          </p>
-                                        </div>
+                                        <p className={`text-xs sm:text-sm ${
+                                          isCurrent || isCompleted ? 'text-gray-700' : 'text-gray-500'
+                                        }`}>
+                                          {step.description}
+                                        </p>
                                       </div>
-                                      
-                                      {/* Línea conectora */}
-                                      {index < steps.length - 1 && (
-                                        <div className="flex-1 h-0.5 mx-2 -mt-9">
-                                          <div className={`h-full ${index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'}`} />
-                                        </div>
-                                      )}
-                                    </React.Fragment>
+                                    </div>
                                   );
                                 })}
                               </div>
                             </div>
 
-                            {/* Stepper vertical para móvil */}
-                            <div className="md:hidden space-y-0">
-                              {steps.map((step, index) => {
-                                const StepIcon = step.icon;
-                                const isCompleted = index < currentStepIndex;
-                                const isCurrent = index === currentStepIndex;
-
-                                return (
-                                  <div key={step.key} className="flex items-start gap-4">
-                                    <div className="flex flex-col items-center">
-                                      {/* Círculo */}
-                                      <div
-                                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
-                                          isCompleted
-                                            ? 'bg-dr-blue border-dr-blue text-white'
-                                            : isCurrent
-                                            ? 'bg-white border-dr-blue text-dr-blue'
-                                            : 'bg-white border-gray-300 text-gray-400'
-                                        }`}
-                                      >
-                                        {isCompleted ? (
-                                          <Check className="h-4 w-4 stroke-[2.5]" />
-                                        ) : (
-                                          <StepIcon className="h-4 w-4" />
-                                        )}
-                                      </div>
-                                      
-                                      {/* Línea conectora */}
-                                      {index < steps.length - 1 && (
-                                        <div className={`w-0.5 h-12 ${index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'}`} />
-                                      )}
-                                    </div>
-                                    
-                                    {/* Contenido */}
-                                    <div className="flex-1 pb-12">
-                                      <p className={`text-sm font-medium ${isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-500'}`}>
-                                        {step.label}
-                                      </p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
                             {/* Estados especiales */}
                             {(isRejected || isCancelled) && (
-                              <div className={`mt-6 p-4 rounded-lg border ${isRejected ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-300'}`}>
-                                <div className="flex items-center gap-2">
-                                  <XCircle className={`h-5 w-5 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
-                                  <p className={`text-sm font-medium ${isRejected ? 'text-red-900' : 'text-gray-900'}`}>
-                                    Solicitud {isRejected ? 'Rechazada' : 'Cancelada'}
-                                  </p>
+                              <div className={`p-4 sm:p-5 rounded-xl border-2 shadow-lg ${
+                                isRejected
+                                  ? 'bg-gradient-to-br from-red-50 to-red-100/50 border-red-300'
+                                  : 'bg-gradient-to-br from-gray-50 to-gray-100/50 border-gray-300'
+                              }`}>
+                                <div className="flex items-start gap-3">
+                                  <div className={`p-2 rounded-lg ${
+                                    isRejected ? 'bg-red-100' : 'bg-gray-200'
+                                  }`}>
+                                    <XCircle className={`h-5 w-5 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className={`text-sm sm:text-base font-bold mb-1 ${
+                                      isRejected ? 'text-red-900' : 'text-gray-900'
+                                    }`}>
+                                      Solicitud {isRejected ? 'Rechazada' : 'Cancelada'}
+                                    </p>
+                                    <p className={`text-xs sm:text-sm ${
+                                      isRejected ? 'text-red-700' : 'text-gray-700'
+                                    }`}>
+                                      {isRejected
+                                        ? 'Esta solicitud no cumplió con los requisitos necesarios.'
+                                        : 'Esta solicitud fue cancelada y no seguirá el proceso normal.'}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             )}
+
+                            {/* Info Box */}
+                            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                              <div className="flex gap-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div className="text-xs sm:text-sm text-blue-800">
+                                  <span className="font-semibold">Información:</span> Este flujo muestra el proceso estándar de una solicitud. Algunas pueden tener pasos adicionales según su tipo y complejidad.
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         );
                       })()}
