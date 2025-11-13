@@ -629,6 +629,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const [statusChangeNotes, setStatusChangeNotes] = useState('');
   const [isSubmittingStatusChange, setIsSubmittingStatusChange] = useState(false);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
+  
+  // Document preview states
+  const [showDocumentPreview, setShowDocumentPreview] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string; type: string } | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -2681,25 +2685,24 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               {/* Tab: Solicitud */}
               <TabsContent value="solicitud" className="flex-1 overflow-y-auto px-6 py-6 space-y-5 m-0 focus-visible:outline-none focus-visible:ring-0">
                   {/* Indicador de Proceso */}
-                  <Card className="border-dr-blue/30 shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-blue-50/50 to-white">
-                    <CardHeader className="bg-gradient-to-r from-dr-blue/10 to-white pb-4">
+                  <Card className="border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                    <CardHeader className="bg-white border-b border-gray-100 pb-4">
                       <CardTitle className="text-lg font-semibold text-dr-dark-gray flex items-center gap-2">
                         <ArrowRight className="h-5 w-5 text-dr-blue" />
                         Progreso de la Solicitud
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-10 pb-10 px-8 bg-gray-50/50">
                       {(() => {
                         const currentStatus = normalizeStatus(selectedRequest.status);
                         const steps = [
-                          { key: 'pendiente', label: 'Recibida', icon: Clock, color: 'text-amber-600', bgColor: 'bg-amber-50', activeBg: 'bg-amber-500', borderColor: 'border-amber-200' },
-                          { key: 'asignada', label: 'Asignada', icon: UserCheck, color: 'text-blue-600', bgColor: 'bg-blue-50', activeBg: 'bg-blue-500', borderColor: 'border-blue-200' },
-                          { key: 'en revisión', label: 'En Revisión', icon: Eye, color: 'text-indigo-600', bgColor: 'bg-indigo-50', activeBg: 'bg-indigo-500', borderColor: 'border-indigo-200' },
-                          { key: 'aprobada', label: 'Aprobada', icon: CheckCircle, color: 'text-green-600', bgColor: 'bg-green-50', activeBg: 'bg-green-500', borderColor: 'border-green-200' },
-                          { key: 'completada', label: 'Completada', icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-50', activeBg: 'bg-emerald-500', borderColor: 'border-emerald-200' },
+                          { key: 'pendiente', label: 'Recibida', icon: Clock },
+                          { key: 'asignada', label: 'Asignada', icon: UserCheck },
+                          { key: 'en revisión', label: 'En Revisión', icon: Eye },
+                          { key: 'aprobada', label: 'Aprobada', icon: CheckCircle },
+                          { key: 'completada', label: 'Completada', icon: CheckCircle2 },
                         ];
 
-                        // Determinar el índice del paso actual
                         const currentStepIndex = steps.findIndex(step => step.key === currentStatus);
                         const isRejected = currentStatus === 'rechazada';
                         const isCancelled = currentStatus === 'cancelada';
@@ -2707,78 +2710,71 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         return (
                           <div className="space-y-6">
                             {/* Stepper horizontal para desktop */}
-                            <div className="hidden md:flex items-start justify-between relative px-4">
-                              {steps.map((step, index) => {
-                                const StepIcon = step.icon;
-                                const isCompleted = index < currentStepIndex;
-                                const isCurrent = index === currentStepIndex;
-                                const isUpcoming = index > currentStepIndex;
+                            <div className="hidden md:block">
+                              <div className="relative flex items-center justify-between px-4">
+                                {steps.map((step, index) => {
+                                  const StepIcon = step.icon;
+                                  const isCompleted = index < currentStepIndex;
+                                  const isCurrent = index === currentStepIndex;
 
-                                return (
-                                  <React.Fragment key={step.key}>
-                                    <div className="flex flex-col items-center gap-3 relative z-10 flex-1">
-                                      <div
-                                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-200 ${
-                                          isCompleted
-                                            ? `${step.activeBg} border-transparent text-white`
-                                            : isCurrent
-                                            ? `${step.bgColor} ${step.borderColor} ${step.color} border-2`
-                                            : 'bg-gray-50 border-gray-300 text-gray-400'
-                                        }`}
-                                      >
-                                        {isCompleted ? (
-                                          <Check className="h-5 w-5 stroke-[2.5]" />
-                                        ) : (
-                                          <StepIcon className="h-5 w-5" />
-                                        )}
-                                      </div>
-                                      <div className="text-center max-w-[100px]">
-                                        <p
-                                          className={`text-xs font-medium ${
-                                            isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-400'
+                                  return (
+                                    <React.Fragment key={step.key}>
+                                      <div className="flex flex-col items-center gap-3 relative z-10">
+                                        {/* Círculo */}
+                                        <div
+                                          className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all ${
+                                            isCompleted
+                                              ? 'bg-dr-blue border-dr-blue text-white'
+                                              : isCurrent
+                                              ? 'bg-white border-dr-blue text-dr-blue'
+                                              : 'bg-white border-gray-300 text-gray-400'
                                           }`}
                                         >
-                                          {step.label}
-                                        </p>
-                                        {isCurrent && (
-                                          <span className="inline-block mt-1.5 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-medium">
-                                            Actual
-                                          </span>
-                                        )}
+                                          {isCompleted ? (
+                                            <Check className="h-5 w-5 stroke-[2.5]" />
+                                          ) : (
+                                            <StepIcon className="h-5 w-5" />
+                                          )}
+                                        </div>
+                                        
+                                        {/* Label */}
+                                        <div className="text-center">
+                                          <p className={`text-sm font-medium ${isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-500'}`}>
+                                            {step.label}
+                                          </p>
+                                        </div>
                                       </div>
-                                    </div>
-                                    {index < steps.length - 1 && (
-                                      <div className="flex items-center pt-5 flex-1 max-w-[80px]">
-                                        <div
-                                          className={`h-[2px] w-full transition-all duration-200 ${
-                                            index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
-                                          }`}
-                                        />
-                                      </div>
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
+                                      
+                                      {/* Línea conectora */}
+                                      {index < steps.length - 1 && (
+                                        <div className="flex-1 h-0.5 mx-2 -mt-9">
+                                          <div className={`h-full ${index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'}`} />
+                                        </div>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
                             </div>
 
                             {/* Stepper vertical para móvil */}
-                            <div className="md:hidden space-y-3">
+                            <div className="md:hidden space-y-0">
                               {steps.map((step, index) => {
                                 const StepIcon = step.icon;
                                 const isCompleted = index < currentStepIndex;
                                 const isCurrent = index === currentStepIndex;
-                                const isUpcoming = index > currentStepIndex;
 
                                 return (
-                                  <div key={step.key} className="flex items-start gap-3">
+                                  <div key={step.key} className="flex items-start gap-4">
                                     <div className="flex flex-col items-center">
+                                      {/* Círculo */}
                                       <div
-                                        className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-200 ${
+                                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
                                           isCompleted
-                                            ? `${step.activeBg} border-transparent text-white`
+                                            ? 'bg-dr-blue border-dr-blue text-white'
                                             : isCurrent
-                                            ? `${step.bgColor} ${step.borderColor} ${step.color}`
-                                            : 'bg-gray-50 border-gray-300 text-gray-400'
+                                            ? 'bg-white border-dr-blue text-dr-blue'
+                                            : 'bg-white border-gray-300 text-gray-400'
                                         }`}
                                       >
                                         {isCompleted ? (
@@ -2787,39 +2783,30 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                           <StepIcon className="h-4 w-4" />
                                         )}
                                       </div>
+                                      
+                                      {/* Línea conectora */}
                                       {index < steps.length - 1 && (
-                                        <div
-                                          className={`w-[2px] h-8 my-1 transition-all duration-200 ${
-                                            index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'
-                                          }`}
-                                        />
+                                        <div className={`w-0.5 h-12 ${index < currentStepIndex ? 'bg-dr-blue' : 'bg-gray-300'}`} />
                                       )}
                                     </div>
-                                    <div className="flex-1 pt-1.5">
-                                      <p
-                                        className={`text-sm font-medium ${
-                                          isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-400'
-                                        }`}
-                                      >
+                                    
+                                    {/* Contenido */}
+                                    <div className="flex-1 pb-12">
+                                      <p className={`text-sm font-medium ${isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-500'}`}>
                                         {step.label}
                                       </p>
-                                      {isCurrent && (
-                                        <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-medium">
-                                          Actual
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
                                 );
                               })}
                             </div>
 
-                            {/* Estados especiales: Rechazada o Cancelada */}
+                            {/* Estados especiales */}
                             {(isRejected || isCancelled) && (
-                              <div className={`p-3 rounded-lg border ${isRejected ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-300'}`}>
+                              <div className={`mt-6 p-4 rounded-lg border ${isRejected ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-300'}`}>
                                 <div className="flex items-center gap-2">
-                                  <XCircle className={`h-4 w-4 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
-                                  <p className={`text-sm font-medium ${isRejected ? 'text-red-700' : 'text-gray-700'}`}>
+                                  <XCircle className={`h-5 w-5 ${isRejected ? 'text-red-600' : 'text-gray-600'}`} />
+                                  <p className={`text-sm font-medium ${isRejected ? 'text-red-900' : 'text-gray-900'}`}>
                                     Solicitud {isRejected ? 'Rechazada' : 'Cancelada'}
                                   </p>
                                 </div>
@@ -2830,6 +2817,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                       })()}
                     </CardContent>
                   </Card>
+
+                  {/* Mensaje informativo para analistas */}
+                  {isAnalystRole && currentUser && selectedRequest.assignedTo === currentUser.name && (
+                    <Alert className="border-blue-200 bg-blue-50">
+                      <Settings className="h-4 w-4 text-blue-600" />
+                      <AlertDescription className="text-blue-800">
+                        <span className="font-semibold">Gestión de Estado:</span> Puedes cambiar el estado de esta solicitud directamente desde el selector en la sección de información.
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   {/* Información de la Solicitud */}
                   <Card className="border-gray-200 shadow-sm hover:shadow-md transition-shadow">
@@ -2849,7 +2846,76 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                         </div>
                         <div className="space-y-2">
                           <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Estado</p>
-                          {getStatusBadge(selectedRequest.status)}
+                          {/* Si es analista y la solicitud está asignada a él, mostrar selector */}
+                          {isAnalystRole && currentUser && selectedRequest.assignedTo === currentUser.name ? (
+                            <Select
+                              value={normalizeStatus(selectedRequest.status)}
+                              onValueChange={async (newStatus) => {
+                                if (!authToken) return;
+                                try {
+                                  await changeRequestStatus(authToken, selectedRequest.id, { status: newStatus });
+                                  toast.success('Estado actualizado correctamente');
+                                  // Recargar la solicitud
+                                  const updated = await getRequestById(selectedRequest.id, authToken);
+                                  setSelectedRequest(updated);
+                                  // Recargar lista de solicitudes
+                                  await loadRequests();
+                                } catch (error: any) {
+                                  toast.error(error.message || 'Error al actualizar el estado');
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pendiente">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="h-4 w-4 text-amber-600" />
+                                    Pendiente
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="asignada">
+                                  <div className="flex items-center gap-2">
+                                    <UserCheck className="h-4 w-4 text-blue-600" />
+                                    Asignada
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="en revisión">
+                                  <div className="flex items-center gap-2">
+                                    <Eye className="h-4 w-4 text-indigo-600" />
+                                    En Revisión
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="aprobada">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                    Aprobada
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="completada">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle className="h-4 w-4 text-emerald-600" />
+                                    Completada
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="rechazada">
+                                  <div className="flex items-center gap-2">
+                                    <X className="h-4 w-4 text-red-600" />
+                                    Rechazada
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="cancelada">
+                                  <div className="flex items-center gap-2">
+                                    <X className="h-4 w-4 text-gray-600" />
+                                    Cancelada
+                                  </div>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            getStatusBadge(selectedRequest.status)
+                          )}
                         </div>
                         <div className="space-y-2">
                           <p className="text-xs font-extrabold uppercase text-gray-700 tracking-wide">Fecha de Recepción</p>
@@ -2976,9 +3042,22 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        const baseUrl = 'http://168.231.72.57:9081';
-                                        const fullUrl = docUrl.startsWith('http') ? docUrl : `${baseUrl}${docUrl}`;
-                                        window.open(fullUrl, '_blank');
+                                        let fullUrl;
+                                        // Si ya es una URL completa, usarla tal cual
+                                        if (docUrl.startsWith('http')) {
+                                          fullUrl = docUrl;
+                                        } else {
+                                          // Usar el storageUri tal como viene y codificarlo
+                                          const encodedPath = encodeURIComponent(docUrl);
+                                          fullUrl = `http://168.231.72.57:9081/api/v1/buckets/siuben/objects/download?preview=true&prefix=${encodedPath}&version_id=null`;
+                                        }
+                                        // Abrir modal de preview
+                                        setPreviewDocument({
+                                          url: fullUrl,
+                                          name: docName,
+                                          type: contentType || 'application/octet-stream'
+                                        });
+                                        setShowDocumentPreview(true);
                                       }}
                                       className="h-9 px-3 border-dr-blue text-dr-blue hover:bg-dr-blue hover:text-white transition-all"
                                     >
@@ -2991,8 +3070,15 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        const baseUrl = 'http://168.231.72.57:9081';
-                                        const fullUrl = docUrl.startsWith('http') ? docUrl : `${baseUrl}${docUrl}`;
+                                        let fullUrl;
+                                        // Si ya es una URL completa, usarla tal cual
+                                        if (docUrl.startsWith('http')) {
+                                          fullUrl = docUrl;
+                                        } else {
+                                          // Usar el storageUri tal como viene y codificarlo (sin preview para descarga)
+                                          const encodedPath = encodeURIComponent(docUrl);
+                                          fullUrl = `http://168.231.72.57:9081/api/v1/buckets/siuben/objects/download?prefix=${encodedPath}&version_id=null`;
+                                        }
                                         const link = document.createElement('a');
                                         link.href = fullUrl;
                                         link.download = docName;
@@ -3320,6 +3406,104 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Preview de Documentos */}
+      <Dialog open={showDocumentPreview} onOpenChange={setShowDocumentPreview}>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-dr-blue" />
+              {previewDocument?.name || 'Vista Previa'}
+            </DialogTitle>
+            <DialogDescription>
+              Visualización del documento
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-hidden bg-gray-100">
+            {previewDocument && (
+              <>
+                {previewDocument.type.includes('pdf') ? (
+                  // Preview para PDFs
+                  <iframe
+                    src={previewDocument.url}
+                    className="w-full h-full border-0"
+                    title={previewDocument.name}
+                  />
+                ) : previewDocument.type.includes('image') ? (
+                  // Preview para imágenes
+                  <div className="w-full h-full flex items-center justify-center p-4">
+                    <img
+                      src={previewDocument.url}
+                      alt={previewDocument.name}
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  // Para otros tipos de archivos
+                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+                    <FileText className="h-16 w-16 text-gray-400 mb-4" />
+                    <p className="text-lg font-semibold text-gray-700 mb-2">
+                      Vista previa no disponible
+                    </p>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Este tipo de archivo no se puede visualizar en el navegador
+                    </p>
+                    <Button
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = previewDocument.url;
+                        link.download = previewDocument.name;
+                        link.target = '_blank';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      className="bg-dr-blue hover:bg-dr-blue/90"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Descargar Archivo
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t bg-white">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (previewDocument) {
+                  const link = document.createElement('a');
+                  link.href = previewDocument.url;
+                  link.download = previewDocument.name;
+                  link.target = '_blank';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Descargar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (previewDocument) {
+                  window.open(previewDocument.url, '_blank');
+                }
+              }}
+            >
+              Abrir en Nueva Pestaña
+            </Button>
+            <Button onClick={() => setShowDocumentPreview(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -5946,7 +6130,7 @@ export function BeneficiariesPage({ currentUser, authToken }: PageProps) {
                 ) : (
                   <Badge variant="outline" className="text-gray-600 border-gray-400">
                     <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
-                    No en Siuben
+                    No hay informacion del Siuben
                   </Badge>
                 )}
                 {selectedBeneficiary?.email && selectedBeneficiary?.phoneNumber && (
