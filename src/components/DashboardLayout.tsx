@@ -693,7 +693,7 @@ export function DashboardLayout({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2.5">
                               <h3 className="font-semibold text-gray-900">
-                                Notificaciones
+                                Notificaciones  &nbsp;
                               </h3>
                               {unreadCount > 0 && (
                                 <span className="inline-flex items-center justify-center min-w-[22px] h-5 bg-red-500 text-white text-[11px] font-bold rounded-full px-1.5 shadow-sm">
