@@ -18,7 +18,6 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "./ui/avatar";
-import { Badge } from "./ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +33,7 @@ import {
   Home,
   FileText,
   Bell,
+  BellRing,
   ClipboardList,
   CheckCircle,
   AlertCircle,
@@ -655,17 +655,25 @@ export function DashboardLayout({
                 {/* Notificaciones */}
                 <div className="relative">
                   <button
-                    className="relative text-dr-dark-gray hover:bg-gray-100 rounded-md p-2 transition-colors"
+                    className="relative text-dr-dark-gray hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 rounded-lg p-2.5 transition-all duration-300 group"
                     onClick={handleToggleNotifications}
+                    aria-label="Notificaciones"
                   >
-                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 ? (
+                      <BellRing className="h-5 w-5 text-indigo-600 animate-pulse" />
+                    ) : (
+                      <Bell className="h-5 w-5 group-hover:text-indigo-600 transition-colors" />
+                    )}
                     {unreadCount > 0 && (
-                      <>
-                        <span className="absolute -top-1 -right-1 h-4 w-4 bg-dr-red text-white text-xs font-bold rounded-full flex items-center justify-center border border-white">
-                          {unreadCount}
+                      <div className="absolute -top-0.5 -right-0.5">
+                        {/* Animación de ping sutil */}
+                        <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75"></span>
+
+                        {/* Contador principal */}
+                        <span className="relative inline-flex items-center justify-center min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full px-1 shadow-lg border border-white">
+                          {unreadCount > 99 ? '99+' : unreadCount}
                         </span>
-                        <span className="absolute -top-1 -right-1 h-4 w-4 bg-dr-red/70 rounded-full animate-ping"></span>
-                      </>
+                      </div>
                     )}
                   </button>
 
@@ -679,34 +687,31 @@ export function DashboardLayout({
                       />
 
                       {/* Panel de Notificaciones */}
-                      <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-hidden">
+                      <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-[500px] overflow-hidden animate-in slide-in-from-top-2 duration-200">
                         {/* Header */}
-                        <div className="p-4 border-b border-gray-100">
+                        <div className="p-4 border-b border-gray-200 bg-gray-50">
                           <div className="flex items-center justify-between">
-                            <h3 className="font-gotham font-bold text-dr-dark-gray">
-                              Notificaciones
-                            </h3>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <h3 className="font-semibold text-gray-900">
+                                Notificaciones
+                              </h3>
                               {unreadCount > 0 && (
-                                <Badge
-                                  variant="outline"
-                                  className="bg-amber-50 text-amber-700 border-amber-200 font-arial-rounded"
-                                >
-                                  {unreadCount} nuevas
-                                </Badge>
-                              )}
-                              {unreadCount > 0 && (
-                                <button
-                                  onClick={() => {
-                              void markAllNotificationsAsRead();
-                                  }}
-                                  disabled={isLoadingNotifications}
-                                  className="text-xs text-dr-blue hover:bg-blue-50 font-arial-rounded px-2 py-1 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                  Marcar como leídas
-                                </button>
+                                <span className="inline-flex items-center justify-center min-w-[22px] h-5 bg-red-500 text-white text-[11px] font-bold rounded-full px-1.5 shadow-sm">
+                                  {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
                               )}
                             </div>
+                            {unreadCount > 0 && (
+                              <button
+                                onClick={() => {
+                                  void markAllNotificationsAsRead();
+                                }}
+                                disabled={isLoadingNotifications}
+                                className="text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Marcar todas como leídas
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -737,11 +742,11 @@ export function DashboardLayout({
                                   <div
                                     key={notification.id}
                                     className={`
-                                      p-3 rounded-lg mb-2 cursor-pointer transition-colors
+                                      relative p-3.5 rounded-lg mb-2 cursor-pointer transition-all duration-200 border
                                       ${
                                         notification.read
-                                          ? "bg-gray-50 hover:bg-gray-100"
-                                          : "bg-white border border-amber-200/50 hover:bg-amber-50"
+                                          ? "bg-white hover:bg-gray-50 border-gray-200"
+                                          : "bg-blue-50 hover:bg-blue-100 border-blue-200 shadow-sm"
                                       }
                                     `}
                                     onClick={() => {
@@ -749,40 +754,52 @@ export function DashboardLayout({
                                     }}
                                   >
                                     <div className="flex items-start gap-3">
+                                      {/* Icono */}
                                       <div
-                                        className={`${visuals.bg} p-2 rounded-full flex-shrink-0`}
+                                        className={`${visuals.bg} p-2 rounded-lg flex-shrink-0`}
                                       >
                                         <Icon
                                           className={`h-4 w-4 ${visuals.color}`}
                                         />
                                       </div>
+
                                       <div className="flex-1 min-w-0">
+                                        {/* Título */}
                                         <div className="flex items-center gap-2 mb-1">
                                           <p
-                                            className={`text-sm font-gotham text-dr-dark-gray ${
-                                              !notification.read ? "font-bold" : "font-semibold"
+                                            className={`text-sm text-gray-900 ${
+                                              !notification.read ? "font-semibold" : "font-normal"
                                             }`}
                                           >
                                             {notification.title}
                                           </p>
                                           {!notification.read && (
-                                            <div className="w-2 h-2 bg-amber-500 rounded-full flex-shrink-0"></div>
+                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0"></div>
                                           )}
                                         </div>
-                                        <p className="text-xs text-gray-600 mb-2 line-clamp-2 font-arial-rounded">
+
+                                        {/* Mensaje */}
+                                        <p className={`text-xs mb-1.5 line-clamp-2 ${
+                                          notification.read ? 'text-gray-500' : 'text-gray-600'
+                                        }`}>
                                           {notification.message}
                                         </p>
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-xs text-gray-500 font-medium">
-                                            {getRelativeTime(notification.createdAt)}
-                                          </span>
+
+                                        {/* Footer */}
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                          <Clock className="h-3 w-3" />
+                                          <span>{getRelativeTime(notification.createdAt)}</span>
                                           {notification.priority === "high" && (
-                                            <Badge
-                                              variant="outline"
-                                              className="bg-red-50 text-red-700 border-red-200 text-xs font-semibold"
-                                            >
-                                              Urgente
-                                            </Badge>
+                                            <>
+                                              <span className="text-gray-400">•</span>
+                                              <span className="text-red-600 font-medium">Urgente</span>
+                                            </>
+                                          )}
+                                          {notification.priority === "medium" && (
+                                            <>
+                                              <span className="text-gray-400">•</span>
+                                              <span className="text-blue-600 font-medium">Importante</span>
+                                            </>
                                           )}
                                         </div>
                                       </div>
@@ -795,9 +812,9 @@ export function DashboardLayout({
                         </div>
 
                         {/* Footer */}
-                        <div className="p-3 border-t border-gray-100 bg-gray-50/50">
+                        <div className="p-3 border-t border-gray-200 bg-gray-50">
                           <button
-                            className="w-full text-dr-blue hover:bg-blue-50 font-semibold py-2 px-4 rounded transition-colors"
+                            className="w-full text-sm text-blue-600 hover:text-blue-700 font-medium py-2 transition-colors text-center"
                             onClick={goToNotificationsPage}
                           >
                             Ver todas las notificaciones

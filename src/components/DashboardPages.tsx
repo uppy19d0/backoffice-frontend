@@ -1155,8 +1155,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                 description: 'La solicitud ha sido marcada como en revisión',
                 duration: 3000,
               });
-              // Recargar la lista de solicitudes y estadísticas
-              await Promise.all([loadRequests(), loadStats()]);
+              // Recargar la lista de solicitudes
+              await loadRequests();
             } else {
               setSelectedRequest(fullRequest);
             }
@@ -1291,8 +1291,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         );
       }
 
-      // Reload requests and stats to get fresh data
-      await Promise.all([loadRequests(), loadStats()]);
+      // Reload requests to get fresh data
+      await loadRequests();
 
       const resolvedId = resolveRequestId(updatedRequest ?? selectedRequest) ?? requestId;
       const applicantName =
@@ -1518,8 +1518,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         duration: 4000,
       });
 
-      // Reload requests and stats to get fresh data
-      await Promise.all([loadRequests(), loadStats()]);
+      // Reload requests to get fresh data
+      await loadRequests();
 
       setShowStatusChangeModal(false);
       setSelectedNewStatus('');
@@ -3227,8 +3227,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                   // Recargar la solicitud
                                   const updated = await getRequestById(selectedRequest.id, authToken);
                                   setSelectedRequest(updated);
-                                  // Recargar lista de solicitudes y estadísticas
-                                  await Promise.all([loadRequests(), loadStats()]);
+                                  // Recargar lista de solicitudes
+                                  await loadRequests();
                                 } catch (error: any) {
                                   toast.error(error.message || 'Error al actualizar el estado');
                                 }
