@@ -952,6 +952,7 @@ function App() {
           <NotificationsPage
             currentUser={currentUser}
             authToken={authToken}
+            onNavigate={setCurrentPage}
           />
         );
       case 'reports':

@@ -53,6 +53,7 @@ import { useIsMobile } from "./ui/use-mobile";
 import governmentLogo from "../assets/Logo-Siuben.png";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import { useNotifications, DashboardNotification, NotificationPriority } from "../context/NotificationsContext";
+import { resolveNotificationNavigationTarget } from "../utils/notificationNavigation";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -284,6 +285,13 @@ export function DashboardLayout({
     void refreshNotifications({ showErrors: true });
     onPageChange('notifications');
   }, [onPageChange, refreshNotifications]);
+
+  const handleNotificationClick = (notification: DashboardNotification) => {
+    void markNotificationAsRead(notification.id);
+    const target = resolveNotificationNavigationTarget(notification);
+    setShowNotifications(false);
+    onPageChange(target.page);
+  };
 
   const getCurrentPageTitle = () => {
     const currentItem = navigationItems.find((item) => item.id === currentPage);
@@ -749,9 +757,7 @@ export function DashboardLayout({
                                           : "bg-blue-50 hover:bg-blue-100 border-blue-200 shadow-sm"
                                       }
                                     `}
-                                    onClick={() => {
-                                      void markNotificationAsRead(notification.id);
-                                    }}
+                                    onClick={() => handleNotificationClick(notification)}
                                   >
                                     <div className="flex items-start gap-3">
                                       {/* Icono */}

@@ -132,7 +132,8 @@ import {
   SearchBeneficiariesOptions,
   searchBeneficiaries,
 } from '../services/api';
-import { useNotifications } from '../context/NotificationsContext';
+import { useNotifications, DashboardNotification } from '../context/NotificationsContext';
+import { resolveNotificationNavigationTarget } from '../utils/notificationNavigation';
 
 // Mock data for available analysts
 const availableAnalysts = [
@@ -4424,7 +4425,7 @@ const FALLBACK_ANALYST_OPTIONS: AnalystOption[] = availableAnalysts.map((analyst
 
 
 // Notifications Page
-export function NotificationsPage({ currentUser, authToken }: PageProps) {
+export function NotificationsPage({ currentUser, authToken, onNavigate }: PageProps) {
   const { notifications, unreadCount, isLoading, error, refresh, markAsRead, markAllAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -4642,6 +4643,15 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
     { label: 'Sin leer', value: 'unread' },
     { label: 'Leídas', value: 'read' },
   ];
+
+  const handleNotificationClick = useCallback(
+    (notification: DashboardNotification) => {
+      void markAsRead(notification.id);
+      const target = resolveNotificationNavigationTarget(notification);
+      onNavigate?.(target.page);
+    },
+    [markAsRead, onNavigate],
+  );
 
   const getPriorityBadge = (priority: string) => {
     const colors = {
@@ -5170,6 +5180,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                             ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
                             : 'border-slate-100 hover:shadow-md'
                         }`}
+                        onClick={() => handleNotificationClick(notification)}
                       >
                         <span
                           className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
@@ -5243,7 +5254,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => markAsRead(notification.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void markAsRead(notification.id);
+                                }}
                                 className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
                                 title="Marcar como leída"
                               >
@@ -5311,6 +5325,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                             ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
                             : 'border-slate-100 hover:shadow-md'
                         }`}
+                        onClick={() => handleNotificationClick(notification)}
                       >
                         <span
                           className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
@@ -5384,7 +5399,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => markAsRead(notification.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void markAsRead(notification.id);
+                                }}
                                 className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
                                 title="Marcar como leída"
                               >
@@ -5452,6 +5470,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                             ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
                             : 'border-slate-100 hover:shadow-md'
                         }`}
+                        onClick={() => handleNotificationClick(notification)}
                       >
                         <span
                           className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
@@ -5525,7 +5544,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => markAsRead(notification.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void markAsRead(notification.id);
+                                }}
                                 className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
                                 title="Marcar como leída"
                               >
@@ -5593,6 +5615,7 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                             ? 'border-dr-blue/30 shadow-blue-100/80 ring-1 ring-dr-blue/20'
                             : 'border-slate-100 hover:shadow-md'
                         }`}
+                        onClick={() => handleNotificationClick(notification)}
                       >
                         <span
                           className={`absolute inset-x-4 top-0 h-1 rounded-full bg-gradient-to-r ${
@@ -5666,7 +5689,10 @@ export function NotificationsPage({ currentUser, authToken }: PageProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => markAsRead(notification.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void markAsRead(notification.id);
+                                }}
                                 className={`text-dr-blue hover:bg-dr-blue/10 ${isUnassignedAlert ? 'mx-auto' : ''}`}
                                 title="Marcar como leída"
                               >
