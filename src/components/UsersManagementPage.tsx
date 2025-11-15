@@ -774,9 +774,13 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       });
 
       toast.success('Usuario creado exitosamente.');
-      setIsCreateDialogOpen(false);
-      setNewUser(INITIAL_FORM_STATE);
+
       await loadUsers();
+
+      // Limpiar formulario y mantener el diálogo abierto para crear más usuarios
+      setNewUser(INITIAL_FORM_STATE);
+      setCreateError(null);
+      setCreateServersideError(null);
     } catch (err) {
       console.error('Error creando usuario', err);
       let message = 'No se pudo crear el usuario. Inténtelo nuevamente.';
@@ -1335,7 +1339,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                   Nuevo usuario
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Crear nuevo usuario</DialogTitle>
                   <DialogDescription>
@@ -1344,6 +1348,62 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                 </DialogHeader>
 
                 {referencesReady ? (
+                  <>
+                    <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-white">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-dr-blue/10 flex items-center justify-center">
+                            <AlertCircle className="h-4 w-4 text-dr-blue" />
+                          </div>
+                          <CardTitle className="text-base">Guía de Creación de Usuarios</CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm">
+                        <div>
+                          <p className="text-gray-700 font-medium mb-2">
+                            Para una gestión efectiva del equipo, siga este orden recomendado:
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex gap-3">
+                            <div className="flex-shrink-0 h-6 w-6 rounded-full bg-dr-blue text-white flex items-center justify-center text-xs font-bold">
+                              1
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-dr-blue mb-1">Crear Supervisor(es)</p>
+                              <p className="text-gray-600 text-xs leading-relaxed">
+                                Los supervisores coordinan equipos y supervisan el trabajo de los analistas.
+                                Tienen permisos para revisar y aprobar solicitudes, gestionar usuarios y acceder a reportes completos.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3">
+                            <div className="flex-shrink-0 h-6 w-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold">
+                              2
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-green-700 mb-1">Crear Analista(s)</p>
+                              <p className="text-gray-600 text-xs leading-relaxed">
+                                Los analistas procesan solicitudes y gestionan beneficiarios. Cada analista debe tener un supervisor asignado.
+                                Asegúrese de seleccionar el supervisor correspondiente al crear el analista.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Separator className="my-2" />
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                          <p className="text-xs text-amber-900">
+                            <strong>💡 Consejo:</strong> Después de crear un usuario exitosamente, el formulario se limpiará automáticamente
+                            pero el diálogo permanecerá abierto para facilitar la creación de múltiples usuarios.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="new-user-email">Correo electrónico</Label>
@@ -1570,6 +1630,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                       />
                     </div>
                   </div>
+                  </>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 py-10">
                     <div className="h-10 w-10 animate-spin rounded-full border-4 border-dr-blue/30 border-t-dr-blue" />
@@ -1592,14 +1653,14 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                   </Alert>
                 )}
 
-                <DialogFooter className="mt-4">
+                <DialogFooter className="mt-4 flex gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => setIsCreateDialogOpen(false)}
                     disabled={isCreating}
                   >
-                    Cancelar
+                    Cerrar
                   </Button>
                   <Button
                     type="button"
