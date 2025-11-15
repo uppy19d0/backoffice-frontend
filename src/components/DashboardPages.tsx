@@ -1707,6 +1707,144 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         ))}
       </div>
 
+      {/* Role Responsibilities Guide */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-white">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-dr-blue/10 flex items-center justify-center">
+              <AlertCircle className="h-4 w-4 text-dr-blue" />
+            </div>
+            <CardTitle className="text-base">
+              {isAdminRole
+                ? 'Responsabilidades del Administrador'
+                : isSupervisorRole
+                  ? 'Responsabilidades del Supervisor'
+                  : 'Responsabilidades del Analista'}
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {isAdminRole && (
+            <>
+              <div className="space-y-2">
+                <p className="text-gray-700 font-medium">
+                  Como administrador, su rol es supervisar el sistema completo:
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-dr-blue text-white flex items-center justify-center text-xs font-bold">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-dr-blue mb-1">Monitorear el Desempeño Global</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      Supervise el flujo operativo, identifique cuellos de botella y detecte patrones en el procesamiento de solicitudes.
+                      Use esta vista para análisis y reportes del sistema.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
+                    ⚠
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-amber-700 mb-1">No Asignar Solicitudes Directamente</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      La asignación de solicitudes es responsabilidad de los supervisores, quienes conocen mejor la carga de trabajo
+                      y capacidades de su equipo. Enfóquese en la gestión estratégica y soporte al equipo.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isSupervisorRole && (
+            <>
+              <div className="space-y-2">
+                <p className="text-gray-700 font-medium">
+                  Como supervisor, usted coordina el flujo de trabajo del equipo:
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-dr-blue text-white flex items-center justify-center text-xs font-bold">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-dr-blue mb-1">Asignar Responsables</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      Revise las solicitudes pendientes y asigne un analista responsable a cada una.
+                      Use el botón "Asignar" en cada solicitud para delegar el trabajo de manera equitativa.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold">
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-purple-700 mb-1">Hacer Seguimiento</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      Monitoree el progreso de las solicitudes asignadas. Puede reasignar casos si es necesario
+                      y aprobar solicitudes que estén listas para su cierre.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isAnalystRole && (
+            <>
+              <div className="space-y-2">
+                <p className="text-gray-700 font-medium">
+                  Como analista, usted procesa las solicitudes asignadas:
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-dr-blue text-white flex items-center justify-center text-xs font-bold">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-dr-blue mb-1">Revisar Cada Solicitud</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      Abra cada solicitud asignada y revise cuidadosamente toda la información y documentación adjunta.
+                      Verifique que cumple con los requisitos necesarios.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 h-6 w-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold">
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-green-700 mb-1">Actualizar el Estado</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      Cambie el estado de la solicitud según su evaluación: de "Pendiente" a "En Revisión" mientras trabaja,
+                      y finalmente a "Aprobada" o "Rechazada" según corresponda. Agregue notas que justifiquen su decisión.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <Separator className="my-2" />
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-xs text-amber-900">
+              <strong>💡 Consejo:</strong>
+              {isAdminRole && ' Use los filtros y reportes para identificar áreas de mejora en el proceso.'}
+              {isSupervisorRole && ' Distribuya las solicitudes considerando la experiencia y carga actual de cada analista.'}
+              {isAnalystRole && ' Mantenga actualizado el estado de sus solicitudes para que su supervisor pueda hacer seguimiento efectivo.'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {!(isSupervisorRole || isAdminRole) && (
         <Alert className="border-gray-200 bg-gray-50">
           <Info className="h-4 w-4 text-gray-600" />
