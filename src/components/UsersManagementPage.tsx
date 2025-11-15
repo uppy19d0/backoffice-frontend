@@ -114,7 +114,7 @@ interface EditDialogState {
   userId: string | null;
   user: AdminUserDto | null;
   formData: {
-    fullName: string;
+    displayName: string;
     email: string;
     jobTitle: string;
     department: string;
@@ -488,7 +488,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
     userId: null,
     user: null,
     formData: {
-      fullName: '',
+      displayName: '',
       email: '',
       jobTitle: '',
       department: 'none',
@@ -857,7 +857,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       userId: null,
       user: null,
       formData: {
-        fullName: '',
+        displayName: '',
         email: '',
         jobTitle: '',
         department: 'none',
@@ -1124,7 +1124,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
     ]);
 
     const formData = {
-      fullName: resolveString(user, ['fullName', 'name'], ''),
+      displayName: resolveString(user, ['displayName', 'name'], ''),
       email: resolveString(user, ['email'], ''),
       jobTitle: resolveString(user, ['jobTitle'], ''),
       department: departmentSelection.value,
@@ -1152,9 +1152,9 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       return;
     }
 
-    const { fullName, email, jobTitle, department, province } = editDialog.formData;
+    const { displayName, email, jobTitle, department, province } = editDialog.formData;
 
-    if (!fullName.trim() || !email.trim()) {
+    if (!displayName.trim() || !email.trim()) {
       setEditDialog(prev => ({
         ...prev,
         error: 'El nombre completo y el email son obligatorios.',
@@ -1169,7 +1169,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       const provinceIdValue = province === 'none' ? null : province;
 
       const payload = {
-        fullName: fullName.trim(),
+        displayName: displayName.trim(),
         email: email.trim(),
         jobTitle: jobTitle.trim() || null,
         department: departmentIdValue,
@@ -1279,16 +1279,16 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
     ? resolveStatusDescriptor(viewDialogUser.status)
     : null;
   const roleDialogUserName = roleDialog.user
-    ? resolveString(roleDialog.user, ['fullName', 'name'], '—')
+    ? resolveString(roleDialog.user, ['displayName', 'fullName', 'name', 'email'], '—')
     : '—';
   const roleDialogUserEmail = roleDialog.user
-    ? resolveString(roleDialog.user, ['email', 'userName', 'username'], '')
+    ? resolveString(roleDialog.user, ['email'], '')
     : '';
   const passwordDialogUserName = passwordDialog.user
-    ? resolveString(passwordDialog.user, ['fullName', 'name'], '—')
+    ? resolveString(passwordDialog.user, ['displayName', 'fullName', 'name', 'email'], '—')
     : '—';
   const passwordDialogUserEmail = passwordDialog.user
-    ? resolveString(passwordDialog.user, ['email', 'userName', 'username'], '')
+    ? resolveString(passwordDialog.user, ['email'], '')
     : '';
   const statusDialogTitle =
     statusDialog.action === 'disable' ? 'Suspender usuario' : 'Reactivar usuario';
@@ -1297,8 +1297,26 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
       ? 'El usuario perderá acceso inmediato al backoffice.'
       : 'El usuario podrá acceder nuevamente al backoffice.';
   const statusDialogUserName = statusDialog.user
-    ? resolveString(statusDialog.user, ['fullName', 'name', 'userName', 'username'], 'usuario seleccionado')
+    ? resolveString(statusDialog.user, ['displayName', 'fullName', 'name', 'email'], 'usuario seleccionado')
     : 'usuario seleccionado';
+
+  // Calculate statistics
+  const activeUsers = users.filter(u => {
+    const status = typeof u.status === 'string' ? u.status.toLowerCase() : String(u.status);
+    return status === 'active' || status === '1';
+  }).length;
+  const inactiveUsers = users.filter(u => {
+    const status = typeof u.status === 'string' ? u.status.toLowerCase() : String(u.status);
+    return status === 'inactive' || status === '0';
+  }).length;
+  const suspendedUsers = users.filter(u => {
+    const status = typeof u.status === 'string' ? u.status.toLowerCase() : String(u.status);
+    return status === 'suspended' || status === '2';
+  }).length;
+  const supervisors = users.filter(u => {
+    const role = (u.role || '').toLowerCase();
+    return role.includes('supervisor') || role.includes('manager');
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -1311,18 +1329,83 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
         </Alert>
       )}
 
+      {/* Statistics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-dr-blue bg-gradient-to-br from-blue-50/50 to-white">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-dr-blue/10 p-3 rounded-xl">
+                <Shield className="h-6 w-6 text-dr-blue" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Total Usuarios</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">
+                  {users.length}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-green-50/50 to-white">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-500/10 p-3 rounded-xl">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Activos</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">{activeUsers}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {users.length > 0 ? `${((activeUsers / users.length) * 100).toFixed(0)}% del total` : '—'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50/50 to-white">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-500/10 p-3 rounded-xl">
+                <Shield className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Supervisores</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">{supervisors}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50/50 to-white">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-500/10 p-3 rounded-xl">
+                <Ban className="h-6 w-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Inactivos/Suspendidos</p>
+                <p className="text-2xl font-bold text-dr-dark-gray mt-0.5">{inactiveUsers + suspendedUsers}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
-        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle className="text-2xl text-dr-dark-gray">Gestión de usuarios</CardTitle>
-            <CardDescription>
-              Consulta los usuarios registrados en el backoffice y crea nuevos perfiles administrativos.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={loadUsers}
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Usuarios del Sistema</CardTitle>
+              <CardDescription>
+                {isLoadingUsers ? 'Cargando...' : `${users.length} usuario${users.length !== 1 ? 's' : ''} registrado${users.length !== 1 ? 's' : ''}`}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={loadUsers}
               disabled={isLoadingUsers || !authToken}
               className="gap-2"
             >
@@ -1673,6 +1756,7 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -1685,6 +1769,21 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
             </Alert>
           )}
 
+          {isLoadingUsers ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-dr-blue mx-auto mb-4"></div>
+                <p className="text-gray-500 font-medium">Cargando usuarios del sistema...</p>
+              </div>
+            </div>
+          ) : users.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <Shield className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No hay usuarios registrados</p>
+              </div>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -1701,28 +1800,15 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoadingUsers ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-gray-500">
-                      Cargando usuarios...
-                    </TableCell>
-                  </TableRow>
-                ) : users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-gray-500">
-                      No hay usuarios registrados.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((user) => {
-                    const fullName = resolveString(user, ['fullName', 'name']);
-                    const email = resolveString(user, ['email', 'userName', 'username'], 'Sin correo');
-                    const role = resolveString(user, ['role', 'roleName', 'roleKey', 'roleDescription']);
-                    const department = resolveString(user, ['departmentName', 'department', 'departmentTitle']);
-                    const province = resolveString(user, ['provinceName', 'province', 'provinceTitle']);
+                {users.map((user) => {
+                    const displayName = resolveString(user, ['displayName', 'fullName', 'name', 'email'], 'Usuario');
+                    const email = resolveString(user, ['email'], 'Sin correo');
+                    const role = resolveString(user, ['role'], '—');
+                    const department = resolveString(user, ['departmentName'], '—');
+                    const province = resolveString(user, ['provinceName'], '—');
                     const statusInfo = resolveStatusDescriptor(user.status);
-                    const createdAt = resolveString(user, ['createdAt', 'createdDate'], '');
-                    const lastAccess = resolveString(user, ['lastAccessAt', 'LastAccessAt', 'lastLoginAt', 'lastLogin'], '');
+                    const createdAt = resolveString(user, ['createdAt'], '');
+                    const lastAccess = resolveString(user, ['lastAccessAt'], '');
                     const identifier = resolveUserIdentifier(user);
                     const isActive = isActiveStatus(user.status);
                     const statusAction: StatusAction = isActive ? 'disable' : 'enable';
@@ -1738,9 +1824,9 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                       <TableRow key={identifier ?? user.id ?? `${email}-${role}`}>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="font-medium text-dr-dark-gray">{fullName}</span>
+                            <span className="font-medium text-dr-dark-gray">{displayName}</span>
                             <span className="text-xs text-gray-500">
-                              {resolveString(user, ['jobTitle', 'position'], '')}
+                              {user.jobTitle || ''}
                             </span>
                           </div>
                         </TableCell>
@@ -1869,11 +1955,11 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
                         </TableCell>
                       </TableRow>
                     );
-                  })
-                )}
+                  })}
               </TableBody>
             </Table>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1906,99 +1992,167 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
           }
         }}
       >
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Detalle del usuario</DialogTitle>
-            <DialogDescription>
-              Consulta la información completa del usuario seleccionado.
-            </DialogDescription>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="border-b pb-4 bg-gradient-to-r from-blue-50/50 to-purple-50/50 -m-6 mb-0 p-6 rounded-t-lg">
+            <div className="space-y-2">
+              <DialogTitle className="text-2xl font-bold text-dr-dark-gray">
+                {viewDialogUser ? resolveString(viewDialogUser, ['displayName', 'fullName', 'name', 'email'], 'Usuario') : 'Detalle del usuario'}
+              </DialogTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                {viewDialogUser && (
+                  <>
+                    <Badge variant="outline" className="text-xs">
+                      <Mail className="h-3 w-3 mr-1" />
+                      {resolveString(viewDialogUser, ['email'], '—')}
+                    </Badge>
+                    {viewDialogStatusInfo && (
+                      <Badge className={`${viewDialogStatusInfo.className} text-xs`}>
+                        {viewDialogStatusInfo.label}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
-          {viewDialog.isLoading && (
-            <div className="flex flex-col items-center justify-center gap-3 py-6">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-dr-blue/30 border-t-dr-blue" />
-              <p className="text-sm text-gray-500">Cargando información...</p>
-            </div>
-          )}
+          <div className="space-y-4 mt-4">
+            {viewDialog.isLoading && (
+              <div className="flex flex-col items-center justify-center gap-3 py-12">
+                <div className="h-12 w-12 animate-spin rounded-full border-4 border-dr-blue/30 border-t-dr-blue" />
+                <p className="text-sm text-gray-500 font-medium">Cargando información...</p>
+              </div>
+            )}
 
-          {!viewDialog.isLoading && viewDialogUser && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase text-gray-500">Nombre</p>
-                <p className="text-sm font-medium text-dr-dark-gray">
-                  {resolveString(viewDialogUser, ['fullName', 'name'], '—')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Usuario</p>
-                <p className="text-sm text-gray-700">
-                  {resolveString(viewDialogUser, ['userName', 'username'], '—')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Correo</p>
-                <p className="text-sm text-gray-700">
-                  {resolveString(viewDialogUser, ['email'], '—')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Rol</p>
-                <p className="text-sm text-gray-700">
-                  {resolveString(viewDialogUser, ['role', 'roleName'], '—')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Departamento</p>
-                <p className="text-sm text-gray-700">
-                  {resolveString(viewDialogUser, ['departmentName', 'department'], '—')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Provincia</p>
-                <p className="text-sm text-gray-700">
-                  {resolveString(viewDialogUser, ['provinceName', 'province'], '—')}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Estado</p>
-                <p className="text-sm text-gray-700">
-                  {viewDialogStatusInfo ? (
-                    <Badge className={viewDialogStatusInfo.className}>
-                      {viewDialogStatusInfo.label}
-                    </Badge>
-                  ) : (
-                    '—'
-                  )}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Creado</p>
-                <p className="text-sm text-gray-700">
-                  {formatDateTime(resolveString(viewDialogUser, ['createdAt', 'createdDate'], ''))}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-gray-500">Último acceso</p>
-                <p className="text-sm text-gray-700">
-                  {formatDateTime(resolveString(viewDialogUser, ['lastAccessAt', 'LastAccessAt', 'lastLoginAt', 'lastLogin'], ''))}
-                </p>
-              </div>
-            </div>
-          )}
+            {!viewDialog.isLoading && viewDialogUser && (
+              <>
+                {/* Información Personal */}
+                <Card className="border-l-4 border-l-dr-blue">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-dr-blue" />
+                      Información Personal
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Nombre de Usuario</p>
+                      <p className="text-sm font-medium text-dr-dark-gray">
+                        {resolveString(viewDialogUser, ['displayName', 'fullName', 'name'], '—')}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Correo Electrónico</p>
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        <p className="text-sm text-dr-blue">
+                          {resolveString(viewDialogUser, ['email'], '—')}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-          {!viewDialog.isLoading && !viewDialogUser && (
-            <p className="text-sm text-gray-500">No se encontraron datos para este usuario.</p>
-          )}
+                {/* Información Laboral */}
+                <Card className="border-l-4 border-l-purple-500">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-purple-600" />
+                      Información Laboral
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Rol</p>
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-purple-600" />
+                        <p className="text-sm font-medium text-gray-700">
+                          {resolveString(viewDialogUser, ['role', 'roleName'], '—')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Cargo</p>
+                      <p className="text-sm text-gray-700">
+                        {resolveString(viewDialogUser, ['jobTitle'], '—')}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Departamento</p>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-gray-400" />
+                        <p className="text-sm text-gray-700">
+                          {resolveString(viewDialogUser, ['departmentName', 'department'], '—')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Provincia</p>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-gray-400" />
+                        <p className="text-sm text-gray-700">
+                          {resolveString(viewDialogUser, ['provinceName', 'province'], '—')}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-          {viewDialog.error && (
-            <Alert className="border-red-200 bg-red-50">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-700">{viewDialog.error}</AlertDescription>
-            </Alert>
-          )}
+                {/* Información del Sistema */}
+                <Card className="border-l-4 border-l-green-500">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      Información del Sistema
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Estado</p>
+                      <div>
+                        {viewDialogStatusInfo ? (
+                          <Badge className={`${viewDialogStatusInfo.className} font-medium`}>
+                            {viewDialogStatusInfo.label}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-gray-500">—</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Fecha de Creación</p>
+                      <p className="text-sm text-gray-700">
+                        {formatDateTime(resolveString(viewDialogUser, ['createdAt', 'createdDate'], ''))}
+                      </p>
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Último Acceso</p>
+                      <p className="text-sm text-gray-700 font-medium">
+                        {formatDateTime(resolveString(viewDialogUser, ['lastAccessAt', 'LastAccessAt', 'lastLoginAt', 'lastLogin'], ''))}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={resetViewDialogState}>
+            {!viewDialog.isLoading && !viewDialogUser && (
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">No se encontraron datos para este usuario.</p>
+              </div>
+            )}
+
+            {viewDialog.error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">{viewDialog.error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter className="border-t pt-4 mt-4">
+            <Button variant="outline" onClick={resetViewDialogState} className="w-full sm:w-auto">
               Cerrar
             </Button>
           </DialogFooter>
@@ -2183,11 +2337,11 @@ export function UsersManagementPage({ currentUser, authToken }: UsersManagementP
               <Label htmlFor="edit-fullName" className="text-sm font-medium">Nombre Completo *</Label>
               <Input
                 id="edit-fullName"
-                value={editDialog.formData.fullName}
+                value={editDialog.formData.displayName}
                 onChange={(e) =>
                   setEditDialog(prev => ({
                     ...prev,
-                    formData: { ...prev.formData, fullName: e.target.value },
+                    formData: { ...prev.formData, displayName: e.target.value },
                   }))
                 }
                 disabled={editDialog.isSubmitting}
