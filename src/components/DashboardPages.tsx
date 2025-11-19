@@ -182,6 +182,41 @@ const getRequestTypeName = (type: string) => {
   }
 };
 
+type RequestDetailTab = 'solicitud' | 'beneficiario' | 'hogar' | 'miembros';
+
+const resolveRequestDetailTab = (
+  request: RequestDto | null | undefined,
+  desiredTab: RequestDetailTab,
+): RequestDetailTab => {
+  if (!request) {
+    return 'solicitud';
+  }
+
+  const hasBeneficiary = Boolean(request.beneficiary);
+  const hasHouseholdData = Boolean(request.beneficiary?.padronData?.found);
+  const hasMembers = Boolean(request.beneficiary?.padronData?.records?.length);
+
+  switch (desiredTab) {
+    case 'beneficiario':
+      return hasBeneficiary ? 'beneficiario' : 'solicitud';
+    case 'hogar':
+      if (hasHouseholdData) {
+        return 'hogar';
+      }
+      return hasBeneficiary ? 'beneficiario' : 'solicitud';
+    case 'miembros':
+      if (hasMembers) {
+        return 'miembros';
+      }
+      if (hasHouseholdData) {
+        return 'hogar';
+      }
+      return hasBeneficiary ? 'beneficiario' : 'solicitud';
+    default:
+      return 'solicitud';
+  }
+};
+
 const getStatusBadge = (status: string | number) => {
   // Convertir número a string si es necesario
   const statusStr = typeof status === 'number' ? String(status) : status;
@@ -671,6 +706,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [viewModalTab, setViewModalTab] = useState<RequestDetailTab>('solicitud');
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showUnassignModal, setShowUnassignModal] = useState(false);
   const [showStatusChangeModal, setShowStatusChangeModal] = useState(false);
@@ -1137,10 +1173,15 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     return { outOfTeamAnalystsCount: outCount, teamAnalystsCount: analysts.length - outCount };
   }, [analysts, isAdminRole]);
 
-  const handleViewRequest = async (request: RequestDto) => {
+  const handleViewRequest = async (
+    request: RequestDto,
+    options?: { initialTab?: RequestDetailTab },
+  ) => {
+    const desiredTab = options?.initialTab ?? 'solicitud';
     try {
       // Cargar datos completos de la solicitud individual (con beneficiary y padronData)
       const fullRequest = await getRequestById(authToken, request.id!);
+      let requestToDisplay: RequestDto | null = fullRequest ?? null;
 
       // Si es un analista y la solicitud está en estado "pending" (1), cambiarla automáticamente a "in-review" (2)
       if (isAnalystRole && authToken && fullRequest) {
@@ -1151,6 +1192,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               notes: 'Solicitud puesta en revisión automáticamente al abrir detalles'
             });
             if (updatedRequest) {
+              requestToDisplay = updatedRequest;
               setSelectedRequest(updatedRequest);
               toast.success('Solicitud puesta en revisión', {
                 description: 'La solicitud ha sido marcada como en revisión',
@@ -1173,11 +1215,14 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
         setSelectedRequest(fullRequest);
       }
 
+      const tabToUse = resolveRequestDetailTab(requestToDisplay ?? fullRequest ?? request, desiredTab);
+      setViewModalTab(tabToUse);
       setShowViewModal(true);
     } catch (error) {
       console.error('Error loading request details:', error);
       // Si falla, usar los datos básicos que ya tenemos
       setSelectedRequest(request);
+      setViewModalTab(resolveRequestDetailTab(request, desiredTab));
       setShowViewModal(true);
     }
   };
@@ -2149,11 +2194,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
-                                // Aquí se podría abrir un modal con información del beneficiario
-                                // o navegar a una vista específica del beneficiario
-                                toast.info('Funcionalidad de beneficiario disponible próximamente');
-                              }}
+                              onClick={() => handleViewRequest(request, { initialTab: 'beneficiario' })}
                               className="text-purple-600 hover:bg-purple-50"
                               title="Ver beneficiario relacionado"
                             >
@@ -3077,7 +3118,11 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
           </DialogHeader>
           
           {selectedRequest && (
-            <Tabs defaultValue="solicitud" className="flex-1 flex flex-col min-h-0">
+            <Tabs
+              value={viewModalTab}
+              onValueChange={(value) => setViewModalTab(value as RequestDetailTab)}
+              className="flex-1 flex flex-col min-h-0"
+            >
               {/* Tabs Navigation - Fixed */}
               <div className="flex-shrink-0 bg-white border-b px-6 pt-4 pb-2">
                 <TabsList className="inline-flex h-10 items-center justify-start gap-1 bg-transparent w-full border-b-0 p-0">
