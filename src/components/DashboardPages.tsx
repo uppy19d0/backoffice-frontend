@@ -4109,19 +4109,41 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               </div>
             )}
 
-            {previewDocument && !previewError && (
-              <div className="w-full h-full flex flex-col">
-                <iframe
-                  className="flex-1 w-full h-full border-0 bg-white"
-                  src={previewDocument.url}
-                  title={previewDocument.name || 'Vista previa'}
-                  style={{ minHeight: '60vh' }}
-                />
-                <div className="px-6 py-2 text-xs text-gray-500 border-t bg-white">
-                  Si la vista no carga, usa Descargar o Abrir en pestaña nueva.
+            {previewDocument && !previewError && (() => {
+              const isImage = looksLikeImage(
+                previewDocument.type,
+                previewDocument.originalUrl || previewDocument.url || previewDocument.name,
+              );
+
+              if (isImage) {
+                return (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-white">
+                    <img
+                      src={previewDocument.url}
+                      alt={previewDocument.name || 'Vista previa'}
+                      className="max-h-[80vh] w-auto max-w-full object-contain"
+                    />
+                    <div className="px-6 py-2 text-xs text-gray-500 border-t bg-white w-full text-center">
+                      Si la imagen no carga, usa Descargar o Abrir en pestaña nueva.
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="w-full h-full flex flex-col">
+                  <iframe
+                    className="flex-1 w-full h-full border-0 bg-white"
+                    src={previewDocument.url}
+                    title={previewDocument.name || 'Vista previa'}
+                    style={{ minHeight: '60vh' }}
+                  />
+                  <div className="px-6 py-2 text-xs text-gray-500 border-t bg-white">
+                    Si la vista no carga, usa Descargar o Abrir en pestaña nueva.
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           <DialogFooter className="px-6 py-4 border-t bg-white">
