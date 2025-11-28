@@ -800,6 +800,24 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     setShowDocumentPreview(false);
   }, [revokePreviewObjectUrl]);
 
+  const handleDownloadDocument = useCallback(async (docName: string, docUrl: string) => {
+    try {
+      // Si docUrl ya es una URL completa (http/https), usarla directamente
+      // Si no, construir la URL de MinIO
+      const fullUrl = docUrl.startsWith('http') ? docUrl : buildMinioObjectUrl(docUrl);
+      const response = await fetch(fullUrl);
+      if (!response.ok) {
+        throw new Error(`Error al descargar: ${response.status}`);
+      }
+      const blob = await response.blob();
+      downloadBlobAsFile(blob, docName);
+      toast.success('Documento descargado exitosamente');
+    } catch (error) {
+      console.error('Error descargando documento:', error);
+      toast.error('Error al descargar el documento');
+    }
+  }, []);
+
   const handleOpenDocumentPreview = useCallback(
     async (docName: string, docUrl: string, contentType?: string | null) => {
       const fullUrl = buildMinioObjectUrl(docUrl) || docUrl;
@@ -3738,16 +3756,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => {
-                                        const fullUrl = buildMinioObjectUrl(docUrl);
-                                        const link = document.createElement('a');
-                                        link.href = fullUrl;
-                                        link.download = docName;
-                                        link.target = '_blank';
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                      }}
+                                      onClick={() => handleDownloadDocument(docName, docUrl)}
                                       className="h-9 px-3 border-green-600 text-green-600 hover:bg-green-600 hover:text-white transition-all"
                                     >
                                       <Download className="h-4 w-4 mr-1.5" />
@@ -4131,16 +4140,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               }
 
               return (
-                <div className="w-full h-full flex flex-col">
-                  <iframe
-                    className="flex-1 w-full h-full border-0 bg-white"
-                    src={previewDocument.url}
-                    title={previewDocument.name || 'Vista previa'}
-                    style={{ minHeight: '60vh' }}
-                  />
-                  <div className="px-6 py-2 text-xs text-gray-500 border-t bg-white">
-                    Si la vista no carga, usa Descargar o Abrir en pestaña nueva.
-                  </div>
+                <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-white">
+                  <p className="text-sm text-gray-700 mb-3">Vista previa no disponible para este archivo.</p>
+                  <p className="text-xs text-gray-500 mb-4">Usa “Abrir en Nueva Pestaña” para verlo.</p>
                 </div>
               );
             })()}
@@ -4152,13 +4154,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               onClick={() => {
                 if (previewDocument) {
                   const targetUrl = previewDocument.originalUrl || previewDocument.url;
-                  const link = document.createElement('a');
-                  link.href = targetUrl;
-                  link.download = previewDocument.name;
-                  link.target = '_blank';
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
+                  handleDownloadDocument(previewDocument.name, targetUrl);
                 }
               }}
             >
