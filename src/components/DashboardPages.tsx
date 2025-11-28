@@ -135,13 +135,57 @@ import {
 import { useNotifications, DashboardNotification } from '../context/NotificationsContext';
 import { resolveNotificationNavigationTarget } from '../utils/notificationNavigation';
 
-// Mock data for available analysts
-const availableAnalysts = [
-  { id: 'analista', name: 'Lic. Esperanza María Rodríguez', role: 'Analista de Solicitudes' },
-  { id: 'operador', name: 'Lic. Juan Miguel Valdez', role: 'Analista Regional' },
-  { id: 'analyst3', name: 'Lic. Carmen Rosa Herrera', role: 'Analista de Evaluación' },
-  { id: 'analyst4', name: 'Lic. Miguel Ángel Castro', role: 'Analista de Documentos' }
-];
+const MINIO_PUBLIC_BASE_URL = (
+  typeof import.meta !== 'undefined' && import.meta.env?.VITE_MINIO_PUBLIC_URL
+    ? String(import.meta.env.VITE_MINIO_PUBLIC_URL)
+    : 'http://168.231.72.57:9000'
+).replace(/\/+$/, '');
+
+const MINIO_BUCKET = (
+  typeof import.meta !== 'undefined' && import.meta.env?.VITE_MINIO_BUCKET
+    ? String(import.meta.env.VITE_MINIO_BUCKET)
+    : 'siuben'
+);
+
+const buildMinioObjectUrl = (
+  storageUri?: string | null,
+  options: { preview?: boolean; versionId?: string | null } = {},
+) => {
+  if (!storageUri) {
+    return '';
+  }
+
+  if (storageUri.startsWith('http')) {
+    return storageUri;
+  }
+
+  const cleanPath = storageUri.startsWith('/') ? storageUri.slice(1) : storageUri;
+  const prefixedPath = cleanPath.startsWith(`${MINIO_BUCKET}/`)
+    ? cleanPath
+    : `${MINIO_BUCKET}/${cleanPath}`;
+  const versionQuery =
+    typeof options.versionId === 'string' && options.versionId.trim().length > 0
+      ? `?versionId=${encodeURIComponent(options.versionId.trim())}`
+      : '';
+
+  return `${MINIO_PUBLIC_BASE_URL}/${prefixedPath}${versionQuery}`;
+};
+
+const looksLikeImage = (contentType?: string | null, nameOrUrl?: string | null): boolean => {
+  if (contentType && contentType.toLowerCase().includes('image')) {
+    return true;
+  }
+  const candidate = (nameOrUrl || '').toLowerCase();
+  return /\.(png|jpe?g|gif|bmp|webp|svg)(\?|$)/i.test(candidate);
+};
+
+const looksLikePdf = (contentType?: string | null, nameOrUrl?: string | null): boolean => {
+  if (contentType && contentType.toLowerCase().includes('pdf')) {
+    return true;
+  }
+  const candidate = (nameOrUrl || '').toLowerCase();
+  return /\.pdf(\?|$)/i.test(candidate);
+};
 
 const isValidGuid = (value?: string | null): value is string => {
   if (typeof value !== 'string') {
@@ -720,7 +764,10 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   
   // Document preview states
   const [showDocumentPreview, setShowDocumentPreview] = useState(false);
-  const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string; type: string } | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string; type: string; originalUrl?: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -732,6 +779,90 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
   const { pushNotification } = useNotifications();
   const previousRequestIdsRef = useRef<Set<string>>(new Set());
   const requestsInitializedRef = useRef(false);
+  const fetchControllerRef = useRef<AbortController | null>(null);
+
+  const revokePreviewObjectUrl = useCallback(() => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+  }, []);
+
+  const handleCloseDocumentPreview = useCallback(() => {
+    if (fetchControllerRef.current) {
+      fetchControllerRef.current.abort();
+      fetchControllerRef.current = null;
+    }
+    revokePreviewObjectUrl();
+    setPreviewLoading(false);
+    setPreviewError(null);
+    setPreviewDocument(null);
+    setShowDocumentPreview(false);
+  }, [revokePreviewObjectUrl]);
+
+  const handleOpenDocumentPreview = useCallback(
+    async (docName: string, docUrl: string, contentType?: string | null) => {
+      const fullUrl = buildMinioObjectUrl(docUrl) || docUrl;
+
+      if (fetchControllerRef.current) {
+        fetchControllerRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      fetchControllerRef.current = controller;
+      setPreviewLoading(true);
+      setPreviewError(null);
+      const initialDocument = {
+        url: fullUrl,
+        originalUrl: fullUrl,
+        name: docName,
+        type: contentType || '',
+      };
+
+      setPreviewDocument(initialDocument);
+      setShowDocumentPreview(true);
+
+      try {
+        const response = await fetch(fullUrl, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(`Respuesta no válida (${response.status})`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+
+        revokePreviewObjectUrl();
+        previewObjectUrlRef.current = objectUrl;
+
+        setPreviewDocument({
+          url: objectUrl,
+          originalUrl: fullUrl,
+          name: docName,
+          type: blob.type || contentType || 'application/octet-stream',
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        console.error('Error cargando vista previa de documento:', error);
+        setPreviewError('No se pudo descargar para vista previa. Usa Descargar o Abrir en pestaña nueva.');
+      } finally {
+        if (!controller.signal.aborted) {
+          setPreviewLoading(false);
+          fetchControllerRef.current = null;
+        }
+      }
+    },
+    [revokePreviewObjectUrl],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (fetchControllerRef.current) {
+        fetchControllerRef.current.abort();
+      }
+      revokePreviewObjectUrl();
+    };
+  }, [revokePreviewObjectUrl]);
 
   const roleString = currentUser?.role ?? '';
   const normalizedRoleString = roleString.trim().toLowerCase();
@@ -751,8 +882,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
     normalizedRoleString.includes('analyst') ||
     normalizedRoleString.includes('analista') ||
     normalizedRoleLevel === 'analyst';
-  const [analysts, setAnalysts] = useState<AnalystOption[]>(FALLBACK_ANALYST_OPTIONS);
-  const [usingFallbackAnalysts, setUsingFallbackAnalysts] = useState(true);
+  const [analysts, setAnalysts] = useState<AnalystOption[]>([]);
+  const [usingFallbackAnalysts, setUsingFallbackAnalysts] = useState(false);
   const [hasLoadedAnalysts, setHasLoadedAnalysts] = useState(false);
   const [isLoadingAnalysts, setIsLoadingAnalysts] = useState(false);
   const [assignDialogError, setAssignDialogError] = useState<string | null>(null);
@@ -2718,7 +2849,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       {/* Status Change Modal */}
       <Dialog open={showStatusChangeModal} onOpenChange={setShowStatusChangeModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" hideCloseButton>
           {/* Custom Close Button */}
           <button
             onClick={() => setShowStatusChangeModal(false)}
@@ -3071,7 +3202,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
 
       {/* View Request Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-7xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+        <DialogContent className="max-w-7xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden" hideCloseButton>
           {/* Custom Close Button */}
           <button
             onClick={() => setShowViewModal(false)}
@@ -3565,8 +3696,8 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                             const docSize = typeof doc === 'object' && doc?.fileSizeBytes ? `${(doc.fileSizeBytes / 1024).toFixed(1)} KB` : '';
                             const docUrl = typeof doc === 'object' ? doc?.storageUri : null;
                             const contentType = typeof doc === 'object' ? doc?.contentType : null;
-                            const isPdf = contentType?.includes('pdf');
-                            const isImage = contentType?.includes('image');
+                            const isPdf = looksLikePdf(contentType, docUrl || docName);
+                            const isImage = looksLikeImage(contentType, docUrl || docName);
                             
                             return (
                               <div key={index} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-orange-300 hover:shadow-sm transition-all group">
@@ -3595,22 +3726,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        let fullUrl;
-                                        // Si ya es una URL completa, usarla tal cual
-                                        if (docUrl.startsWith('http')) {
-                                          fullUrl = docUrl;
-                                        } else {
-                                          // Usar el storageUri tal como viene y codificarlo
-                                          const encodedPath = encodeURIComponent(docUrl);
-                                          fullUrl = `http://168.231.72.57:9081/api/v1/buckets/siuben/objects/download?preview=true&prefix=${encodedPath}&version_id=null`;
-                                        }
-                                        // Abrir modal de preview
-                                        setPreviewDocument({
-                                          url: fullUrl,
-                                          name: docName,
-                                          type: contentType || 'application/octet-stream'
-                                        });
-                                        setShowDocumentPreview(true);
+                                        handleOpenDocumentPreview(docName, docUrl, contentType || 'application/octet-stream');
                                       }}
                                       className="h-9 px-3 border-dr-blue text-dr-blue hover:bg-dr-blue hover:text-white transition-all"
                                     >
@@ -3623,15 +3739,7 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        let fullUrl;
-                                        // Si ya es una URL completa, usarla tal cual
-                                        if (docUrl.startsWith('http')) {
-                                          fullUrl = docUrl;
-                                        } else {
-                                          // Usar el storageUri tal como viene y codificarlo (sin preview para descarga)
-                                          const encodedPath = encodeURIComponent(docUrl);
-                                          fullUrl = `http://168.231.72.57:9081/api/v1/buckets/siuben/objects/download?prefix=${encodedPath}&version_id=null`;
-                                        }
+                                        const fullUrl = buildMinioObjectUrl(docUrl);
                                         const link = document.createElement('a');
                                         link.href = fullUrl;
                                         link.download = docName;
@@ -3963,7 +4071,16 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
       </Dialog>
 
       {/* Modal de Preview de Documentos */}
-      <Dialog open={showDocumentPreview} onOpenChange={setShowDocumentPreview}>
+      <Dialog
+        open={showDocumentPreview}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseDocumentPreview();
+          } else {
+            setShowDocumentPreview(true);
+          }
+        }}
+      >
         <DialogContent className="max-w-6xl h-[90vh] flex flex-col p-0">
           <DialogHeader className="px-6 py-4 border-b">
             <DialogTitle className="flex items-center gap-2">
@@ -3975,53 +4092,35 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-hidden bg-gray-100">
-            {previewDocument && (
-              <>
-                {previewDocument.type.includes('pdf') ? (
-                  // Preview para PDFs
-                  <iframe
-                    src={previewDocument.url}
-                    className="w-full h-full border-0"
-                    title={previewDocument.name}
-                  />
-                ) : previewDocument.type.includes('image') ? (
-                  // Preview para imágenes
-                  <div className="w-full h-full flex items-center justify-center p-4">
-                    <img
-                      src={previewDocument.url}
-                      alt={previewDocument.name}
-                      className="max-w-full max-h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  // Para otros tipos de archivos
-                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
-                    <FileText className="h-16 w-16 text-gray-400 mb-4" />
-                    <p className="text-lg font-semibold text-gray-700 mb-2">
-                      Vista previa no disponible
-                    </p>
-                    <p className="text-sm text-gray-500 mb-6">
-                      Este tipo de archivo no se puede visualizar en el navegador
-                    </p>
-                    <Button
-                      onClick={() => {
-                        const link = document.createElement('a');
-                        link.href = previewDocument.url;
-                        link.download = previewDocument.name;
-                        link.target = '_blank';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                      className="bg-dr-blue hover:bg-dr-blue/90"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Descargar Archivo
-                    </Button>
-                  </div>
-                )}
-              </>
+          <div className="flex-1 overflow-hidden bg-gray-100 relative">
+            {previewLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-50/70 backdrop-blur-[1px]">
+                <div className="flex items-center gap-3 text-gray-700">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span className="text-sm font-medium">Cargando vista previa...</span>
+                </div>
+              </div>
+            )}
+
+            {previewError && (
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-white border-t">
+                <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+                <p className="text-sm text-gray-600 max-w-md">{previewError}</p>
+              </div>
+            )}
+
+            {previewDocument && !previewError && (
+              <div className="w-full h-full flex flex-col">
+                <iframe
+                  className="flex-1 w-full h-full border-0 bg-white"
+                  src={previewDocument.url}
+                  title={previewDocument.name || 'Vista previa'}
+                  style={{ minHeight: '60vh' }}
+                />
+                <div className="px-6 py-2 text-xs text-gray-500 border-t bg-white">
+                  Si la vista no carga, usa Descargar o Abrir en pestaña nueva.
+                </div>
+              </div>
             )}
           </div>
 
@@ -4030,8 +4129,9 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               variant="outline"
               onClick={() => {
                 if (previewDocument) {
+                  const targetUrl = previewDocument.originalUrl || previewDocument.url;
                   const link = document.createElement('a');
-                  link.href = previewDocument.url;
+                  link.href = targetUrl;
                   link.download = previewDocument.name;
                   link.target = '_blank';
                   document.body.appendChild(link);
@@ -4047,13 +4147,14 @@ export function RequestsPage({ currentUser, authToken }: PageProps) {
               variant="outline"
               onClick={() => {
                 if (previewDocument) {
-                  window.open(previewDocument.url, '_blank');
+                  const targetUrl = previewDocument.originalUrl || previewDocument.url;
+                  window.open(targetUrl, '_blank');
                 }
               }}
             >
               Abrir en Nueva Pestaña
             </Button>
-            <Button onClick={() => setShowDocumentPreview(false)}>
+            <Button onClick={handleCloseDocumentPreview}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -4598,13 +4699,7 @@ interface AnalystOption {
   isSameDepartment?: boolean;
 }
 
-const FALLBACK_ANALYST_OPTIONS: AnalystOption[] = availableAnalysts.map((analyst) => ({
-  id: analyst.id,
-  name: analyst.name,
-  email: null,
-  role: analyst.role,
-  departmentName: null,
-}));
+const FALLBACK_ANALYST_OPTIONS: AnalystOption[] = [];
 
 
 // Notifications Page
