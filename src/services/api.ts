@@ -1,14 +1,113 @@
-const DEFAULT_BASE_URL = 'https://siuben-backoffice-api.azurewebsites.net';
+interface RuntimeAppConfig {
+  API_BASE_URL?: string;
+  API_BASE_URLS?: string[];
+}
+
+declare global {
+  interface Window {
+    __APP_CONFIG__?: RuntimeAppConfig;
+  }
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
+function extractHostname(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function parseBaseUrls(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map((item) => normalizeBaseUrl(item.trim()));
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .map(normalizeBaseUrl);
+  }
+
+  return [];
+}
+
+function dedupeBaseUrls(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+
+  for (const url of urls) {
+    if (!seen.has(url)) {
+      deduped.push(url);
+      seen.add(url);
+    }
+  }
+
+  return deduped;
+}
+
+function prioritizeCurrentHost(urls: string[]): string[] {
+  if (typeof window === 'undefined' || !window.location?.hostname) {
+    return urls;
+  }
+
+  const currentHost = window.location.hostname.toLowerCase();
+  const matching: string[] = [];
+  const nonMatching: string[] = [];
+
+  for (const url of urls) {
+    if (extractHostname(url) === currentHost) {
+      matching.push(url);
+    } else {
+      nonMatching.push(url);
+    }
+  }
+
+  return [...matching, ...nonMatching];
+}
+
+function resolveApiBaseUrls(): string[] {
+  const runtimeConfig =
+    typeof window !== 'undefined' ? window.__APP_CONFIG__ : undefined;
+
+  const runtimeBaseUrls = parseBaseUrls(runtimeConfig?.API_BASE_URLS);
+  const runtimeBaseUrl = parseBaseUrls(runtimeConfig?.API_BASE_URL);
+
+  const envBaseUrls =
+    typeof import.meta !== 'undefined'
+      ? parseBaseUrls((import.meta as any).env?.VITE_API_BASE_URLS)
+      : [];
+  const envBaseUrl =
+    typeof import.meta !== 'undefined'
+      ? parseBaseUrls((import.meta as any).env?.VITE_API_BASE_URL)
+      : [];
+
+  const resolved =
+    runtimeBaseUrls.length > 0 ? runtimeBaseUrls
+    : runtimeBaseUrl.length > 0 ? runtimeBaseUrl
+    : envBaseUrls.length > 0 ? envBaseUrls
+    : envBaseUrl.length > 0 ? envBaseUrl
+    : [];
+
+  return prioritizeCurrentHost(dedupeBaseUrls(resolved));
+}
 
 /**
  * Central configuration for the Siuben Backoffice API.
- * Use VITE_API_BASE_URL to override the default host when needed.
+ * Priority: runtime config (/runtime-config.js) -> VITE_API_BASE_URL(S).
  */
-export const API_BASE_URL = (
-  typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL
-    ? String(import.meta.env.VITE_API_BASE_URL)
-    : DEFAULT_BASE_URL
-).replace(/\/+$/, '');
+export const API_BASE_URLS = resolveApiBaseUrls();
+export const API_BASE_URL = API_BASE_URLS[0] ?? '';
+
+const MISSING_API_BASE_URL_MESSAGE =
+  'No hay URL base de API configurada. Define API_BASE_URL/API_BASE_URLS en runtime-config.js o VITE_API_BASE_URL/VITE_API_BASE_URLS en .env.';
 
 export class ApiError extends Error {
   status?: number;
@@ -41,7 +140,13 @@ export async function apiFetch<TResponse = unknown>(
   path: string,
   { token, body, headers = {}, ...init }: ApiFetchOptions = {},
 ): Promise<TResponse> {
-  const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  if (API_BASE_URLS.length === 0) {
+    throw new ApiError(MISSING_API_BASE_URL_MESSAGE, undefined, {
+      baseUrls: API_BASE_URLS,
+    });
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const requestHeaders = new Headers(headers);
 
   const isJsonBody =
@@ -75,40 +180,63 @@ export async function apiFetch<TResponse = unknown>(
         : (body as PrimitiveBody);
   }
 
-  const response = await fetch(url, requestInit);
+  let lastConnectionError: unknown;
 
-  if (!response.ok) {
-    let details: unknown;
+  for (const baseUrl of API_BASE_URLS) {
+    const url = `${baseUrl}${normalizedPath}`;
+
     try {
-      const contentType = response.headers.get('Content-Type') ?? '';
-      if (contentType.includes('application/json')) {
-        details = await response.json();
-      } else {
-        details = await response.text();
+      const response = await fetch(url, requestInit);
+
+      if (!response.ok) {
+        let details: unknown;
+        try {
+          const contentType = response.headers.get('Content-Type') ?? '';
+          if (contentType.includes('application/json')) {
+            details = await response.json();
+          } else {
+            details = await response.text();
+          }
+        } catch {
+          details = undefined;
+        }
+
+        const message =
+          (typeof details === 'object' && details && 'message' in details && typeof (details as any).message === 'string'
+            ? (details as any).message
+            : `Solicitud fallida (${response.status})`);
+
+        throw new ApiError(message, response.status, details);
       }
-    } catch {
-      details = undefined;
+
+      if (response.status === 204) {
+        return undefined as TResponse;
+      }
+
+      const responseContentType = response.headers.get('Content-Type') ?? '';
+      if (!responseContentType.includes('application/json')) {
+        // Return text or blob depending on caller expectations; default to text.
+        return (await response.text()) as unknown as TResponse;
+      }
+
+      return response.json() as Promise<TResponse>;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      lastConnectionError = error;
     }
-
-    const message =
-      (typeof details === 'object' && details && 'message' in details && typeof (details as any).message === 'string'
-        ? (details as any).message
-        : `Solicitud fallida (${response.status})`);
-
-    throw new ApiError(message, response.status, details);
   }
 
-  if (response.status === 204) {
-    return undefined as TResponse;
-  }
-
-  const responseContentType = response.headers.get('Content-Type') ?? '';
-  if (!responseContentType.includes('application/json')) {
-    // Return text or blob depending on caller expectations; default to text.
-    return (await response.text()) as unknown as TResponse;
-  }
-
-  return response.json() as Promise<TResponse>;
+  throw new ApiError(
+    'No se pudo conectar con la API en ninguna URL configurada.',
+    undefined,
+    {
+      baseUrls: API_BASE_URLS,
+      cause: lastConnectionError,
+    },
+  );
 }
 
 const buildAuthorizationHeader = (token: string): string =>
@@ -147,6 +275,12 @@ async function fetchReportBlob(
   token: string,
   accept: string = 'application/octet-stream',
 ): Promise<Blob> {
+  if (!API_BASE_URL) {
+    throw new ApiError(MISSING_API_BASE_URL_MESSAGE, undefined, {
+      baseUrls: API_BASE_URLS,
+    });
+  }
+
   const url = `${API_BASE_URL}${normalisePath(path)}`;
   const headers = new Headers({
     Authorization: buildAuthorizationHeader(token),
